@@ -126,6 +126,27 @@ export interface PiAiProviderProfile {
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
+  /**
+   * Nucleus-sampling mass for every request on this route, 0 to 1. Sent as the
+   * OpenAI-compatible `top_p` field, which pi-ai's own stream options do not
+   * carry, so it rides the payload hook rather than a typed option. Absent
+   * sends none and the server's own default applies.
+   *
+   * Route-level rather than per-request: the seam's `GenerateOptions` carries
+   * `temperature` and nothing else, so a per-session value would mean widening
+   * that type and every consumer of it.
+   */
+  topP?: number
+  /**
+   * Fixed sampling seed for every request on this route. Two identical
+   * requests then return identical text, which is what makes an A/B of a
+   * prompt or a setting readable. Absent sends none, and each request samples
+   * independently.
+   *
+   * Deliberately not a default: inside an agent loop a fixed seed makes a
+   * retry reproduce the identical failing output rather than varying past it.
+   */
+  seed?: number
   /** Prompt-cache retention preference. */
   cacheRetention?: CacheRetention
   /** Streaming transport preference. */
@@ -243,6 +264,8 @@ const profile = z.object({
   headers: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
+  topP: z.number().min(0).max(1),
+  seed: z.natural(),
   cacheRetention: z.union(['none', 'short', 'long']),
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
   timeoutMs: z.natural(),

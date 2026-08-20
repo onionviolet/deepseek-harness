@@ -99,6 +99,37 @@ function profileOptions(
 }
 
 /**
+ * Sampling fields the OpenAI-compatible wire accepts but pi-ai's stream
+ * options do not carry, injected through the SDK's payload hook.
+ *
+ * The hook is the only seam for them: `SimpleStreamOptions` types
+ * `temperature` and `maxTokens` and nothing else, and returning undefined
+ * leaves the payload untouched, so a route configuring neither field adds no
+ * behavior at all. The guard is on the exact model's protocol rather than the
+ * route's, because a catalog route names no protocol and lets each model
+ * declare its own; `seed` in particular is not an Anthropic field and would
+ * be a wire error there rather than a no-op.
+ * @param profile - the resolved route profile.
+ * @returns the payload hook, or nothing when the route configures neither field.
+ */
+function samplingPayload(
+  profile: ResolvedPiAiProviderProfile,
+): Pick<SimpleStreamOptions, 'onPayload'> | Record<string, never> {
+  const extra: Record<string, number> = {
+    ...profile.topP === undefined ? {} : { top_p: profile.topP },
+    ...profile.seed === undefined ? {} : { seed: profile.seed },
+  }
+  if (Object.keys(extra).length === 0) return {}
+  return {
+    onPayload: (payload: unknown, model: Model<Api>): unknown => {
+      if (model.api !== 'openai-completions') return undefined
+      if (typeof payload !== 'object' || payload === null) return undefined
+      return { ...payload, ...extra }
+    },
+  }
+}
+
+/**
  * The profile default this exact model can actually take, for DESCRIBING it.
  * A configured level the model does not support yields none rather than
  * throwing: `resolveModel` builds the model catalog, and a catalog that fails
@@ -312,6 +343,7 @@ export class PiAiAdapter extends LlmAdapter {
         : await toPiContext(options, attachments)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
+        ...samplingPayload(profile),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

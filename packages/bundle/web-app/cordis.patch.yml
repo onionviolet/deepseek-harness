@@ -250,6 +250,10 @@
     - id: ui-model-selection
       name: '@deepseek-ai/dsh-client-ui-model-selection'
 
+    # Composer temperature bar bound to the host `llm-sampling` section.
+    - id: ui-sampling
+      name: '@deepseek-ai/dsh-client-ui-sampling'
+
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
 

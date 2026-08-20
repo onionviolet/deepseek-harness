@@ -125,6 +125,11 @@ const DEFAULT_MAX_MESSAGES = 50
  */
 const WEB_SETTINGS_NAMESPACES = [
   'agent-loop', 'shell', 'locale', 'permission', 'ui-conversation', 'ui-theme', 'web-search-deepseek',
+  // Local addition: the `llm-sampling` section owned by @local/dsh-llm-sampling.
+  // The composer temperature control reads and writes it over this wire, so
+  // without this entry `settings.describe` omits the namespace and every
+  // `settings.mutate` on it answers `settings-not-exposed`.
+  'llm-sampling',
 ] as const
 
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */

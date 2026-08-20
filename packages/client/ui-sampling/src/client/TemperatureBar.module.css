@@ -1,0 +1,75 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.label {
+  user-select: none;
+  white-space: nowrap;
+}
+
+.bar {
+  width: 84px;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.bar:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.field {
+  width: 44px;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: center;
+}
+
+.field::-webkit-outer-spin-button,
+.field::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.reset {
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reset:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.reset:not(:disabled):hover {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.auto .label,
+.auto .field {
+  color: var(--dsw-alias-label-secondary);
+}
