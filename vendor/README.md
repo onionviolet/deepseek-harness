@@ -26,6 +26,15 @@ Third-party dependencies of the vendored packages stay on npm: `@standard-schema
 
 Intentionally **not** vendored (verified unused by this set): `reggol`, `@cordisjs/utils`, `@cordisjs/element`, `@cordisjs/unyaml` (dev-time YAML import hook only).
 
+### In-flight upstream sync
+
+`cordis/src/` is part-way onto upstream `8cc9e33fab69` (`4.0.0-rc.8`). The Commit column above names the snapshot every file is fully at; the list below names each later upstream commit already cherry-picked ahead of it, and is empty whenever the column is current. Entries here are upstream code, not local modifications: they leave the log below alone and are deleted when the column catches up.
+
+- `eb5604dd8` ([cordiverse/cordis#32](https://github.com/cordiverse/cordis/pull/32)) — `logger.ts`: `LoggerLevel.WARN` is 1 and `INFO` is 2. The vendored order had the two swapped, so an exporter threshold of 1 kept `info` and dropped `warn`.
+- `fd96b0a14` ([cordiverse/cordis#36](https://github.com/cordiverse/cordis/pull/36)) — `logger.ts`: `exporter()`'s disposer closes over its own map id instead of re-reading the shared `_snExporter` counter, so disposing one exporter no longer deletes whichever registered last; the ring buffer trims in place.
+
+Covered by `packages/boot/app-boot/tests/cordis-logger.spec.ts`.
+
 ## Local modifications
 
 Keep this log exhaustive — every divergence from upstream must be listed.

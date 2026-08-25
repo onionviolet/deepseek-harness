@@ -21,8 +21,8 @@ export type Formatter = (value: any, exporter: Exporter, message: Message) => an
 /** Numeric severity used when exporters decide whether to emit a message. */
 export const enum LoggerLevel {
   ERROR = 0,
-  INFO = 1,
-  WARN = 2,
+  WARN = 1,
+  INFO = 2,
   DEBUG = 3,
 }
 
@@ -214,8 +214,12 @@ export class LoggerService {
       colors: 3,
       export: (message) => {
         self.buffer.push(message)
-        if (self.buffer.length > self.bufferSize) {
-          self.buffer = self.buffer.slice(-self.bufferSize)
+        // for better performance
+        const overflow = self.buffer.length - self.bufferSize
+        if (overflow === 1) {
+          self.buffer.shift()
+        } else if (overflow > 1) {
+          self.buffer.splice(0, overflow)
         }
       },
     })
@@ -231,8 +235,9 @@ export class LoggerService {
    */
   exporter(exporter: Exporter) {
     return this.ctx.effect(() => {
-      this.exporters.set(++this._snExporter, exporter)
-      return () => this.exporters.delete(this._snExporter)
+      const id = ++this._snExporter
+      this.exporters.set(id, exporter)
+      return () => this.exporters.delete(id)
     }, 'ctx.logger.exporter()')
   }
 
