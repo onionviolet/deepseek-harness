@@ -2,7 +2,7 @@
 
 This directory contains source-vendored copies of the Cordis framework and its foundation libraries. They are copied into this monorepo instead of being depended on via npm, so that the harness fully owns its framework layer (auditable, patchable, pinned).
 
-All vendored packages are **renamed into the `@deepseek-ai` scope** (`cordis` → `@deepseek-ai/cordis`, `@cordisjs/plugin-<x>` → `@deepseek-ai/cordis-plugin-<x>`): every harness package declares `cordis` as a peer dependency, so publishing the harness publishes this framework layer too, and a publication under the upstream names would squat them on the registry. Directory names and upstream version numbers are deliberately unchanged, so the manifest below still reads as an upstream snapshot. `pnpm-workspace.yaml#linkWorkspacePackages` makes those preserved semver ranges resolve these pinned workspaces, including imports from built `lib/`. The `hygiene` gate `verify-vendored-links` asserts every vendored name resolves to a workspace `link:` in `pnpm-lock.yaml` with no registry copy alongside. Schemastery's manifest additionally declares a conditional `exports` map (import → `.mjs`, require → `.cjs`): pnpm links the directory itself, so without `exports` Node's ESM resolver would fall back to `main` and load the CJS entry whose lazy `require('@deepseek-ai/cosmokit')` can race ESM loading of the same linked module under module-hook hosts (vitest). Upstream MIT `LICENSE` files are preserved in each package directory.
+All vendored packages are **renamed into the `@deepseek-ai` scope** (`cordis` → `@deepseek-ai/cordis`, `@cordisjs/plugin-<x>` → `@deepseek-ai/cordis-plugin-<x>`): every harness package declares `cordis` as a peer dependency, so publishing the harness publishes this framework layer too, and a publication under the upstream names would squat them on the registry. Directory names are deliberately unchanged, and the manifest's Version column records the upstream version each snapshot was taken at, so the table still reads as an upstream snapshot. Each vendored `package.json` carries the harness release version instead — the vendored packages publish as a release family (`pnpm run release:vendor`), so their versions advance with the harness and will not match that column. `pnpm-workspace.yaml#linkWorkspacePackages` makes those preserved semver ranges resolve these pinned workspaces, including imports from built `lib/`. The `hygiene` gate `verify-vendored-links` asserts every vendored name resolves to a workspace `link:` in `pnpm-lock.yaml` with no registry copy alongside. Schemastery's manifest additionally declares a conditional `exports` map (import → `.mjs`, require → `.cjs`): pnpm links the directory itself, so without `exports` Node's ESM resolver would fall back to `main` and load the CJS entry whose lazy `require('@deepseek-ai/cosmokit')` can race ESM loading of the same linked module under module-hook hosts (vitest). Upstream MIT `LICENSE` files are preserved in each package directory.
 
 This file covers the manifest, the local-modification log, and the procedure for **updating** an existing vendored package. To **add a new** one, see the cookbook guide: [docs/cookbook/adding-a-vendored-package.md](../docs/cookbook/adding-a-vendored-package.md).
 
@@ -14,7 +14,7 @@ Upstream workspace: `cordis-workspace` (local checkout: `~/repos/cordis-workspac
 |---|---|---|---|---|---|
 | `cosmokit/` | `@deepseek-ai/cosmokit` | `cosmokit` | 1.8.1 | https://github.com/deepseek-harness/cosmokit | `16f6fc058ade66e8ac5da0033d35a8d0f279f544` |
 | `schemastery/` | `@deepseek-ai/schemastery` | `schemastery` | 3.18.0 | https://github.com/deepseek-harness/schemastery (`packages/core`) | `e67cee00ad725bd1534aee930a979ea3eec6f698` |
-| `cordis/` | `@deepseek-ai/cordis` | `cordis` | 4.0.0-rc.7 | https://github.com/cordiverse/cordis (`packages/core`) | `56b3d4f725681cf4556c1a8695a709cc3b6eed74` |
+| `cordis/` | `@deepseek-ai/cordis` | `cordis` | 4.0.0-rc.8 | https://github.com/cordiverse/cordis (`packages/core`) | `8cc9e33fab69e2d0476d126baaf2acb24e6a6ab4` |
 | `loader/` | `@deepseek-ai/cordis-plugin-loader` | `@cordisjs/plugin-loader` | 1.0.0-rc.5 | https://github.com/cordiverse/cordis (`packages/loader`) | `56b3d4f725681cf4556c1a8695a709cc3b6eed74` |
 | `include/` | `@deepseek-ai/cordis-plugin-include` | `@cordisjs/plugin-include` | 1.0.4 | https://github.com/deepseek-harness/cordis (`packages/include`) | `abb0a307cb1d3b0947f455d590cf5ba922d4caa4` |
 | `group/` | `@deepseek-ai/cordis-plugin-group` | `@cordisjs/plugin-group` | 1.0.0 | https://github.com/deepseek-harness/cordis (`packages/group`) | `abb0a307cb1d3b0947f455d590cf5ba922d4caa4` |
@@ -25,17 +25,6 @@ Upstream workspace: `cordis-workspace` (local checkout: `~/repos/cordis-workspac
 Third-party dependencies of the vendored packages stay on npm: `@standard-schema/spec`, `js-yaml`, `chokidar`, `picomatch`, `@babel/code-frame`, `supports-color`, `node-addon-require-builtin`.
 
 Intentionally **not** vendored (verified unused by this set): `reggol`, `@cordisjs/utils`, `@cordisjs/element`, `@cordisjs/unyaml` (dev-time YAML import hook only).
-
-### In-flight upstream sync
-
-`cordis/src/` is part-way onto upstream `8cc9e33fab69` (`4.0.0-rc.8`). The Commit column above names the snapshot every file is fully at; the list below names each later upstream commit already cherry-picked ahead of it, and is empty whenever the column is current. Entries here are upstream code, not local modifications: they leave the log below alone and are deleted when the column catches up.
-
-- `eb5604dd8` ([cordiverse/cordis#32](https://github.com/cordiverse/cordis/pull/32)) — `logger.ts`: `LoggerLevel.WARN` is 1 and `INFO` is 2. The vendored order had the two swapped, so an exporter threshold of 1 kept `info` and dropped `warn`.
-- `fd96b0a14` ([cordiverse/cordis#36](https://github.com/cordiverse/cordis/pull/36)) — `logger.ts`: `exporter()`'s disposer closes over its own map id instead of re-reading the shared `_snExporter` counter, so disposing one exporter no longer deletes whichever registered last; the ring buffer trims in place.
-- `29581f6d0` ([cordiverse/cordis#38](https://github.com/cordiverse/cordis/pull/38)) — `events.ts`: dispatch resolves listeners once through `_resolve()` and applies them with `Reflect.apply`, instead of allocating a bound closure per listener per dispatch. `internal/dispatch` is emitted only when something listens for it. Local modification 15's `internal/config` declaration and modification 6's widened `internal/update` return type are re-applied on top.
-- `752dbee95` ([cordiverse/cordis#40](https://github.com/cordiverse/cordis/pull/40)) — `fiber.ts`: `restart()` and `update()` resolve the canonical fiber through `this.ctx.fiber` before touching lifecycle state. Called on a wrapped fiber — which is what `ctx.plugin()` returns — they wrote `state`, `config`, and `inertia` as own properties of the wrapper, so the canonical fiber never saw them and a config update was silently lost whenever an injected service reloaded at the same time. `update()` keeps modification 15's deferred config resolution and modification 6's returned waterfall result, both rebound to that canonical fiber.
-
-Covered by `packages/boot/app-boot/tests/cordis-logger.spec.ts` and `packages/boot/app-boot/tests/cordis-fiber.spec.ts`.
 
 ## Local modifications
 
@@ -67,6 +56,7 @@ To update a vendored package from upstream:
 
 1. In the upstream workspace, note `git rev-parse HEAD` of the relevant submodule.
 2. Copy the package's `src/` (and `bin.js`, `README.md`, `LICENSE` if changed) over the vendored directory.
-3. Re-apply the local modifications listed above (or drop them if upstream made them unnecessary — update the log either way).
-4. Update the version and commit hash in the manifest table.
-5. Run `pnpm install && pnpm run test && pnpm run build` at the repo root.
+3. Re-apply the local modifications listed above (or drop them if upstream made them unnecessary — update the log either way). For a file a modification rewrote, merge rather than copy: `git merge-file <vendored> <upstream-at-the-manifest-SHA> <upstream-head>` reports exactly where an upstream change and a local one overlap, and carries the rest across without asking you to spot it.
+4. Update the version and commit hash in the manifest table. Land the sync in pieces if the re-application is large, and record the commits applied ahead of the column under the manifest until it catches up, so the column never names a snapshot no file is at.
+5. Run `pnpm install && pnpm run test && pnpm run build` at the repo root. `packages/boot/app-boot/tests/cordis-{logger,fiber,shadow}.spec.ts` are the vendored-framework regressions: they pin upstream behavior this harness relies on, so a sync that breaks one has re-applied a modification wrongly.
+6. Pin each upstream fix you carried across with a test that fails without it. A modification re-applied by hand is not verified by compiling.

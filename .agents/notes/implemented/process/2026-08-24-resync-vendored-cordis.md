@@ -22,6 +22,10 @@ The `events.ts` and `fiber.ts` re-application runs as a real three-way merge —
 
 The one behavior upstream deprecates and the harness still needs stays supported locally: `events.dispatch()` returns the resolved listener set, and ten harness call sites drive listeners themselves so a single throw or rejection cannot starve the rest. Upstream's `emit()` still runs listeners in one uncontained loop, so there is nothing to migrate to; local modification 19 drops the tag and records upstream's intent.
 
+The sync ends with `cordis/src` fully at `8cc9e33fab69`, the manifest column bumped, and the in-flight section deleted. The procedure in `vendor/README.md` now records the three-way merge, the staged-landing rule, and the requirement that each carried fix be pinned by a test that fails without it.
+
+The manifest's Version column and the vendored `package.json` versions had already diverged before this sync: the vendored packages publish as a release family, so their versions advance with the harness while the column records the upstream snapshot. The manifest claimed both were unchanged from upstream. It now says which is which.
+
 ## Alternatives considered
 
 - **Copy upstream `src/` over and re-apply the local-modification log** — rejected, and it is the procedure `vendor/README.md` documents. Local modifications 6, 8, 12, and 15 rewrote `fiber.ts` and `events.ts` past the point where the log reads as a re-appliable patch series; a wholesale copy makes the reviewer diff the union of six upstream fixes against four local rewrites in one change, with no commit at which a single behavior can be pinned.
@@ -35,4 +39,5 @@ The one behavior upstream deprecates and the harness still needs stays supported
 - `packages/boot/app-boot/tests/` is now the home for vendored-framework regressions as well as boot glue. That ownership is stated in the test files rather than implied, because the package's README describes boot helpers and nothing there predicts logger coverage.
 - The wrapped-fiber fix closes a silent config-loss path, not only a tidiness one: before it, `update()` on a fiber whose injected service was reloading at the same moment applied the *previous* config and reported success. The regression test pins that pair of updates specifically.
 - `events.dispatch()` stays undeprecated locally, so the ten call sites keep compiling without suppressions and the migration stays a decision rather than a lint deadline. The cost is that upstream's signal lives only in the JSDoc and the modification log.
+- `symbols.caller` replaces the retained-shadow mechanism for identity-aware services. `ctx.logger` is the harness's only such service today, and it now reads its caller explicitly instead of inferring it from a shadow the tracker had to preserve. A service that wants caller identity no longer needs `noShadow`.
 - Numeric log levels in configuration change meaning: `levels: { default: 1 }` selected `info` and now selects `warn`. The only such value in the repository is `default: 3` (debug), whose meaning is unchanged, and no published on-disk format carries a level.
