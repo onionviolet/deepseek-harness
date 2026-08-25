@@ -295,8 +295,8 @@ export class LlmRuntime extends Service {
 
   /** Notify topology observers without letting one broken listener veto the commit. */
   private emitAdaptersUpdated(): void {
-    // Cordis emit uses Array.map: one synchronous throw starves later
-    // listeners. Registry notifications are non-vetoing, so contain each
+    // Cordis emit invokes listeners in one uncontained loop: a synchronous
+    // throw starves the rest. Registry notifications are non-vetoing, so contain each
     // callback independently; INVARIANT-coded failures still surface.
     let invariantFailure: unknown
     for (const listener of this.ctx.events.dispatch('emit', ['llm/adapters-updated']) as Array<() => unknown>) {

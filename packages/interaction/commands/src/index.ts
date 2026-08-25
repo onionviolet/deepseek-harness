@@ -438,8 +438,8 @@ export class CommandRuntime extends TypertRemoteService {
 
   /** Notify every registry observer without making UI refresh load-bearing. */
   private notifyChange(): void {
-    // Cordis emit uses Array.map: one synchronous throw starves later listeners,
-    // and returned promises are discarded. Registry notifications are
+    // Cordis emit invokes listeners in one uncontained loop: a synchronous throw
+    // starves the rest, and returned promises are discarded. Registry notifications are
     // non-vetoing, so contain each callback independently.
     for (const callback of this.ctx.events.dispatch('emit', ['commands/change'])) {
       try {

@@ -18,6 +18,10 @@ Regression coverage lives in `packages/boot/app-boot/tests/`. `vendor/` is outsi
 
 Each fix is pinned by a test that fails against the pre-fix source. That check is the point of the cherry-pick order: an upstream fix re-applied by hand onto locally modified code is not verified by the fact that it compiles.
 
+The `events.ts` and `fiber.ts` re-application runs as a real three-way merge — upstream at the manifest SHA as the base, the vendored file as ours, upstream's head as theirs — rather than by reading the two diffs side by side. The local modifications are large enough that an upstream hunk landing in untouched code is easy to miss by eye, and the merge reports exactly the regions where an upstream change and a local one overlap. Both files produced one conflict, each in a region a local modification owns.
+
+The one behavior upstream deprecates and the harness still needs stays supported locally: `events.dispatch()` returns the resolved listener set, and ten harness call sites drive listeners themselves so a single throw or rejection cannot starve the rest. Upstream's `emit()` still runs listeners in one uncontained loop, so there is nothing to migrate to; local modification 19 drops the tag and records upstream's intent.
+
 ## Alternatives considered
 
 - **Copy upstream `src/` over and re-apply the local-modification log** — rejected, and it is the procedure `vendor/README.md` documents. Local modifications 6, 8, 12, and 15 rewrote `fiber.ts` and `events.ts` past the point where the log reads as a re-appliable patch series; a wholesale copy makes the reviewer diff the union of six upstream fixes against four local rewrites in one change, with no commit at which a single behavior can be pinned.
@@ -29,4 +33,6 @@ Each fix is pinned by a test that fails against the pre-fix source. That check i
 
 - The manifest is truthful at every commit in the sequence, at the cost of a section that must be deleted when the column is bumped. A stale in-flight list is visible (it names commits) where a stale Commit column is not.
 - `packages/boot/app-boot/tests/` is now the home for vendored-framework regressions as well as boot glue. That ownership is stated in the test files rather than implied, because the package's README describes boot helpers and nothing there predicts logger coverage.
+- The wrapped-fiber fix closes a silent config-loss path, not only a tidiness one: before it, `update()` on a fiber whose injected service was reloading at the same moment applied the *previous* config and reported success. The regression test pins that pair of updates specifically.
+- `events.dispatch()` stays undeprecated locally, so the ten call sites keep compiling without suppressions and the migration stays a decision rather than a lint deadline. The cost is that upstream's signal lives only in the JSDoc and the modification log.
 - Numeric log levels in configuration change meaning: `levels: { default: 1 }` selected `info` and now selects `warn`. The only such value in the repository is `default: 3` (debug), whose meaning is unchanged, and no published on-disk format carries a level.

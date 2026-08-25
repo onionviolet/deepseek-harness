@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-24-resync-vendored-cordis.md
-2026-08-24-resync-vendored-cordis.md: 086713de297e633bbca21cdc8d8ebb18d0ff2ee2
-2026-08-24-resync-vendored-cordis.zh.md: 258c47fcd47c3b74481d38ef654554388f55f268
+2026-08-24-resync-vendored-cordis.md: fc8ae8f4172e791f82c4848138e9c73f4b40a185
+2026-08-24-resync-vendored-cordis.zh.md: f998593d05e936e99078c5ca41200b4ae08f81c2

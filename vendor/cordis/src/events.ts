@@ -160,18 +160,33 @@ export class EventsService {
    *
    * @param type — the dispatch mode, reported on `internal/dispatch`.
    * @param args — the raw dispatch arguments; consumed up to the event name.
-   * @returns the matching listener callbacks, bound to the dispatch `this`.
+   * @returns the dispatch `this` and the matching unbound listener callbacks.
    */
-  dispatch(type: string, args: any[]) {
+  private _resolve(type: string, args: any[]) {
     const thisArg = typeof args[0] === 'object' || typeof args[0] === 'function' ? args.shift() : null
     const name: string = args.shift()
-    if (!name.startsWith('internal/')) {
+    if (!name.startsWith('internal/') && this._hooks['internal/dispatch']?.length) {
       this.emit('internal/dispatch', type, name, args, thisArg)
     }
     const filter = thisArg?.[Context.filter]
-    return (this._hooks[name] || [])
-      .filter(hook => hook.global || !filter || filter.call(thisArg, hook.ctx))
-      .map(hook => hook.callback.bind(thisArg))
+    return [thisArg, (this._hooks[name] || [])
+      .filter(hook => hook.global || !filter || filter.call(thisArg, hook.ctx)).map(hook => hook.callback)] as const
+  }
+
+  /**
+   * Resolve listeners for one dispatch, each bound to the dispatch `this`.
+   *
+   * The harness resolves listener sets itself where it must contain a
+   * per-listener failure, so this stays supported locally (vendor/README.md
+   * local modification 19) even though upstream marks it `@deprecated`.
+   *
+   * @param type — the dispatch mode, reported on `internal/dispatch`.
+   * @param args — the raw dispatch arguments; consumed up to the event name.
+   * @returns the matching listener callbacks, bound to the dispatch `this`.
+   */
+  dispatch(type: string, args: any[]) {
+    const [thisArg, callbacks] = this._resolve(type, args)
+    return callbacks.map(callback => callback.bind(thisArg))
   }
 
   /**
@@ -181,7 +196,8 @@ export class EventsService {
    * @returns a promise resolving once every listener has settled.
    */
   async parallel(...args: any[]) {
-    const results = await Promise.allSettled(this.dispatch('emit', args).map(async cb => cb(...args)))
+    const [thisArg, callbacks] = this._resolve('emit', args)
+    const results = await Promise.allSettled(callbacks.map(async callback => Reflect.apply(callback, thisArg, args)))
     const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     if (errors.length) throw new AggregateError(errors.map(error => error.reason))
   }
@@ -192,7 +208,8 @@ export class EventsService {
    * @param args — optional `this`, the event name, then listener arguments.
    */
   emit(...args: any[]) {
-    this.dispatch('emit', args).map(cb => cb(...args))
+    const [thisArg, callbacks] = this._resolve('emit', args)
+    for (const callback of callbacks) Reflect.apply(callback, thisArg, args)
   }
 
   /**
@@ -202,8 +219,9 @@ export class EventsService {
    * @returns the first bail value (see {@link isBailed}), if any.
    */
   async serial(...args: any[]) {
-    for (const cb of this.dispatch('serial', args)) {
-      const result = await cb(...args)
+    const [thisArg, callbacks] = this._resolve('serial', args)
+    for (const callback of callbacks) {
+      const result = await Reflect.apply(callback, thisArg, args)
       if (isBailed(result)) return result
     }
   }
@@ -215,8 +233,9 @@ export class EventsService {
    * @returns the first bail value (see {@link isBailed}), if any.
    */
   bail(...args: any[]) {
-    for (const cb of this.dispatch('bail', args)) {
-      const result = cb(...args)
+    const [thisArg, callbacks] = this._resolve('bail', args)
+    for (const callback of callbacks) {
+      const result = Reflect.apply(callback, thisArg, args)
       if (isBailed(result)) return result
     }
   }
@@ -232,11 +251,11 @@ export class EventsService {
    * @returns the outermost listener's return value.
    */
   waterfall(...args: any[]) {
-    const cbs = this.dispatch('waterfall', args)
+    const [thisArg, callbacks] = this._resolve('waterfall', args)
     const inner = args.pop()
     const next = () => {
-      const cb = cbs.shift() ?? inner
-      return cb(...args)
+      const callback = callbacks.shift()
+      return callback ? Reflect.apply(callback, thisArg, args) : inner(...args)
     }
     args.push(next)
     return next()
