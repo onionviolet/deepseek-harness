@@ -8,7 +8,7 @@ English | [中文](2026-09-05-vendor-upstream-status.zh.md)
 
 The manifest in `vendor/README.md` records which upstream repository and commit every vendored directory was taken from, and nothing ever read it back. Drift was discovered when someone thought to look, so it accumulated: by the [resync onto upstream head](2026-09-05-resync-vendored-cordis-head.md) the Cordis rows were twelve `src` commits behind, and one of those commits was a fix upstream had ported *from* this repository — the harness shipped a defect it had already diagnosed because nobody compared the two sides.
 
-Two of the recorded upstreams cannot be reached at all. The `cosmokit/` and `schemastery/` rows name `deepseek-harness` mirrors that no longer resolve, and the commits they record exist in no reachable repository: `shigma/cosmokit` and `shigma/schemastery` are live but do not contain those SHAs. Nobody noticed, because nothing tried.
+Two of the recorded upstreams could not be reached at all. The `cosmokit/` and `schemastery/` rows named `deepseek-harness` mirrors that no longer resolve, and the commits they recorded exist in no reachable repository: `shigma/cosmokit` and `shigma/schemastery` are live but do not contain those SHAs. Nobody noticed, because nothing tried.
 
 ## Decision
 
@@ -18,17 +18,17 @@ The tool reports drift; it does not gate a commit. Vendored drift is not caused 
 
 The source prefix, not the package directory, decides relevance: an upstream README or test change is not drift for a vendored copy that ships `src` only. Manifest parsing, prefix derivation, commit filtering and report rendering are pure functions over an injected comparison fetcher, so `scripts/vendor-upstream-status.spec.ts` covers them without a network, and one case parses the manifest this repository actually ships — a table-format change fails that case rather than silently reporting zero rows.
 
-The unreachable `cosmokit/` and `schemastery/` provenance is recorded in `vendor/README.md` as a stated gap rather than repaired by guessing: repointing those rows at `shigma/*` would name repositories that do not contain the recorded commits, which is a worse claim than the one being fixed. Whoever next syncs either package re-derives the provenance by comparing the vendored source against a reachable upstream, then repoints the row.
+The tool's first run found the two unreachable rows, and they are repaired by content rather than by guessing a release tag. `vendor/cosmokit/src` is byte-identical to `shigma/cosmokit@02e691c5aa7f` once the logged `.ts`-specifier and JSDoc modifications are applied, and `vendor/schemastery/src/index.ts` matches `shigma/schemastery@cf0b7e5481d0` (`packages/core`) apart from the two lines modification 10 owns — the `type Dict` import and the ESM default export. Both rows now name a repository that resolves and a commit that contains the source the vendored copy actually carries, and `vendor/README.md` records that re-derivation method for the next time an upstream disappears.
 
 ## Alternatives considered
 
 - **A nightly CI job that diffs vendored sources against upstream checkouts** — the [supply-chain proposal](../../proposed/process/2026-06-11-supply-chain-and-vendor-drift.md) still owns that; it needs a checked-in patch file per local modification to distinguish expected divergence from new drift. This command answers the cheaper question ("what has upstream done since?") with no new artifacts to maintain, and it is the question the last two syncs actually needed answered.
 - **Add it to `hygiene` or the pre-commit hook** — rejected: it needs the network, its answer does not depend on the change under review, and a rate-limited API call in a commit hook trades a real gate for an intermittent one.
 - **Compare file contents rather than commit lists** — rejected here: the vendored files carry twenty-four logged local modifications, so a content diff is mostly expected divergence and needs the patch-file machinery above to be readable. A commit list is directly actionable: each entry is a candidate to cherry-pick or dismiss.
-- **Repoint the `cosmokit`/`schemastery` rows at `shigma/*`** — rejected: those repositories do not contain the recorded commits, so the row would claim a provenance that cannot be checked out. An unreachable mirror that the tool reports every run is the honest state.
+- **Repoint the `cosmokit`/`schemastery` rows at the `shigma/*` release tag matching the Version column** — rejected: the tag is a guess about which snapshot the mirror held. Comparing the vendored source against candidate commits costs one diff and produces a commit the row can claim, which is what shipped. Leaving the rows pointed at the vanished mirrors was rejected for the same reason the tool exists: an unverifiable provenance that nothing checks is how this drifted in the first place.
 
 ## Consequences
 
 - `pnpm run vendor:status` is the first thing the sync procedure tells you to run, so a sync starts from the list of upstream commits rather than from a diff someone assembled by hand.
-- The command exits non-zero today, because the two unverifiable rows are reported as comparison failures. That is deliberate: their provenance is genuinely broken, and a green run would hide it. A scheduled `--check` job therefore needs those rows repaired before it is worth wiring up.
+- All nine rows now resolve and report up to date, so the command exits zero and `--check` is meaningful to schedule. A row that stops resolving is a comparison failure, which fails `--check` the same way being behind does.
 - The GitHub API is called without a token unless `GITHUB_TOKEN` or `GH_TOKEN` is set. Nine rows fit inside the unauthenticated rate limit; a repository far behind reports at most the first 100 commits of the range, which is enough to decide to sync.

@@ -12,8 +12,8 @@ Upstream workspace: `cordis-workspace` (local checkout: `~/repos/cordis-workspac
 
 | Directory | npm name | Upstream name | Version | Upstream repo | Commit |
 |---|---|---|---|---|---|
-| `cosmokit/` | `@deepseek-ai/cosmokit` | `cosmokit` | 1.8.1 | https://github.com/deepseek-harness/cosmokit | `16f6fc058ade66e8ac5da0033d35a8d0f279f544` |
-| `schemastery/` | `@deepseek-ai/schemastery` | `schemastery` | 3.18.0 | https://github.com/deepseek-harness/schemastery (`packages/core`) | `e67cee00ad725bd1534aee930a979ea3eec6f698` |
+| `cosmokit/` | `@deepseek-ai/cosmokit` | `cosmokit` | 1.8.1 | https://github.com/shigma/cosmokit | `02e691c5aa7f37f6e0b1cee7ee8f4a21c2e34507` |
+| `schemastery/` | `@deepseek-ai/schemastery` | `schemastery` | 3.18.0 | https://github.com/shigma/schemastery (`packages/core`) | `cf0b7e5481d0e31d10cdc30bc45c09366c332f27` |
 | `cordis/` | `@deepseek-ai/cordis` | `cordis` | 4.0.0-rc.9 | https://github.com/cordiverse/cordis (`packages/core`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 | `loader/` | `@deepseek-ai/cordis-plugin-loader` | `@cordisjs/plugin-loader` | 1.0.0-rc.6 | https://github.com/cordiverse/cordis (`packages/loader`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 | `include/` | `@deepseek-ai/cordis-plugin-include` | `@cordisjs/plugin-include` | 1.0.5 | https://github.com/cordiverse/cordis (`packages/include`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
@@ -22,7 +22,9 @@ Upstream workspace: `cordis-workspace` (local checkout: `~/repos/cordis-workspac
 | `hmr/` | `@deepseek-ai/cordis-plugin-hmr` | `@cordisjs/plugin-hmr` | 1.0.15 | https://github.com/cordiverse/cordis (`packages/hmr`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 | `logger-console/` | `@deepseek-ai/cordis-plugin-logger-console` | `@cordisjs/plugin-logger-console` | 1.0.0 | https://github.com/cordiverse/cordis (`packages/logger-console`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 
-`pnpm run vendor:status` reads this table and asks each upstream repository which commits since the recorded one touch the vendored package's `src`; `--check` exits non-zero when any row is behind. It also reports a row whose upstream cannot be reached, which is the state `cosmokit/` and `schemastery/` are in: the `deepseek-harness` mirrors they name no longer resolve, and the commits they record are in no reachable repository (`shigma/cosmokit` and `shigma/schemastery` exist but do not contain them). Their provenance is therefore unverifiable until someone re-derives it by comparing the vendored sources against a reachable upstream and repoints the row; the seven Cordis rows above were repointed at `cordiverse/cordis`, where their commits do exist.
+`pnpm run vendor:status` reads this table and asks each upstream repository which commits since the recorded one touch the vendored package's `src`; `--check` exits non-zero when any row is behind, and a row whose upstream cannot be reached is reported as a comparison failure.
+
+Every row names a repository that resolves and a commit that exists in it. The nine rows previously named `deepseek-harness` mirrors that no longer resolve. The seven Cordis rows moved to `cordiverse/cordis`, which contains their commits. The `cosmokit/` and `schemastery/` commits existed only in the vanished mirrors, so those two rows were re-derived by content: each vendored source is identical to the named upstream commit once the modifications logged below are applied — `cosmokit/src` byte-for-byte, and `schemastery/src/index.ts` apart from the two lines modification 10 owns. Re-derive a row the same way if its upstream ever disappears again: name the commit whose source the vendored copy actually matches, not the closest guess.
 
 Third-party dependencies of the vendored packages stay on npm: `@standard-schema/spec`, `js-yaml`, `chokidar`, `picomatch`, `@babel/code-frame`, `supports-color`, `node-addon-require-builtin`.
 

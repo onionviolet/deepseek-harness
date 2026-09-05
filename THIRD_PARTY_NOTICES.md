@@ -15,8 +15,8 @@ The Cordis framework and its foundation libraries are source-vendored into this 
 
 | Package | Upstream name | Upstream | License |
 | --- | --- | --- | --- |
-| `@deepseek-ai/cosmokit` | `cosmokit` | [github.com/deepseek-harness/cosmokit](https://github.com/deepseek-harness/cosmokit) | MIT |
-| `@deepseek-ai/schemastery` | `schemastery` | [github.com/deepseek-harness/schemastery](https://github.com/deepseek-harness/schemastery) | MIT |
+| `@deepseek-ai/cosmokit` | `cosmokit` | [github.com/shigma/cosmokit](https://github.com/shigma/cosmokit) | MIT |
+| `@deepseek-ai/schemastery` | `schemastery` | [github.com/shigma/schemastery](https://github.com/shigma/schemastery) | MIT |
 | `@deepseek-ai/cordis` | `cordis` | [github.com/cordiverse/cordis](https://github.com/cordiverse/cordis) | MIT |
 | `@deepseek-ai/cordis-plugin-loader` | `@cordisjs/plugin-loader` | [github.com/cordiverse/cordis](https://github.com/cordiverse/cordis) | MIT |
 | `@deepseek-ai/cordis-plugin-include` | `@cordisjs/plugin-include` | [github.com/cordiverse/cordis](https://github.com/cordiverse/cordis) | MIT |
