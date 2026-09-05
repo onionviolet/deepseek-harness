@@ -49,8 +49,14 @@ Object.defineProperty(ValidationError.prototype, kValidationError, {
  */
 export function resolveConfig(runtime: Plugin.Runtime, config: any) {
   if (!runtime.Config) return config
+  // The plugin arrives from an imported module, so its `Config` is whatever the
+  // author exported: report the contract it misses instead of failing inside it.
+  const standard = runtime.Config['~standard'] as StandardSchemaV1.Props | undefined
+  if (typeof standard?.validate !== 'function') {
+    throw new TypeError('plugin Config must implement Standard Schema V1')
+  }
   // TODO: async validation
-  const result = runtime.Config['~standard'].validate(config)
+  const result = standard.validate(config)
   if ('then' in result) {
     throw new TypeError('Async config validation is not supported')
   }
@@ -116,9 +122,19 @@ function runDisposable(dispose: Disposable) {
   return effectInertia.get(dispose)?.() ?? result
 }
 
-/** Notify plugin teardown without allowing one observer to break ownership cleanup. */
-function emitPluginDisposed(context: Context, fiber: Fiber) {
-  const args: any[] = ['internal/plugin', fiber]
+/**
+ * Dispatch a lifecycle notification, containing each observer's failure.
+ *
+ * `emit()` runs listeners in one uncontained loop, so a throwing observer
+ * starves its peers and — for a notification raised from inside a lifecycle
+ * transition — escapes into the transition itself. Observers of these events
+ * own neither fiber state nor the fiber's error, so their failures are logged
+ * and dropped.
+ *
+ * @param context — the context to dispatch through and to log failures to.
+ * @param args — the event name followed by its arguments.
+ */
+function emitContained(context: Context, args: any[]) {
   let callbacks: Function[]
   try {
     callbacks = context.events.dispatch('emit', args)
@@ -134,6 +150,16 @@ function emitPluginDisposed(context: Context, fiber: Fiber) {
       context.logger.error(error)
     }
   }
+}
+
+/** Notify plugin teardown without allowing one observer to break ownership cleanup. */
+function emitPluginDisposed(context: Context, fiber: Fiber) {
+  emitContained(context, ['internal/plugin', fiber])
+}
+
+/** Notify a lifecycle-state change without allowing one observer to fail the fiber. */
+function emitFiberStatus(context: Context, fiber: Fiber, oldState: FiberState) {
+  emitContained(context, ['internal/status', fiber, oldState])
 }
 
 /**
@@ -586,7 +612,7 @@ export class Fiber {
     this.state = callback() ?? this._getState()
     if (oldState === this.state) return
     // FIXME internal/fiber-info
-    this.context.emit('internal/status', this, oldState)
+    emitFiberStatus(this.context, this, oldState)
 
     // only notify changes between ACTIVE and NON-ACTIVE states
     if (oldState !== FiberState.ACTIVE && this.state !== FiberState.ACTIVE) return

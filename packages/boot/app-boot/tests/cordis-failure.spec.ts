@@ -84,3 +84,47 @@ describe('vendored cordis failed fibers', () => {
     }
   })
 })
+
+describe('vendored cordis status observers', () => {
+  it('keeps a healthy plugin active when a status observer throws', async () => {
+    const root = new Context()
+    const logged = vi.spyOn(root.logger, 'error').mockImplementation(() => {})
+    root.on('internal/status', () => { throw new Error('observer boom') }, { global: true })
+
+    let applied = 0
+    const fiber = root.plugin(() => { applied += 1 })
+    await fiber
+
+    // Status observers own neither the fiber's state nor its error, so their
+    // failures are logged and dropped rather than written into the fiber.
+    expect(applied).toBe(1)
+    expect(fiber.state).toBe(FiberState.ACTIVE)
+    expect(logged).toHaveBeenCalled()
+  })
+
+  it('keeps the plugin failure a status observer throw could overwrite', async () => {
+    const root = new Context()
+    const logged = vi.spyOn(root.logger, 'error').mockImplementation(() => {})
+    root.on('internal/status', () => { throw new Error('observer boom') }, { global: true })
+
+    const fiber = root.plugin(async () => { throw new Error('plugin boom') })
+    await expect(Promise.resolve(fiber)).rejects.toThrow('plugin boom')
+
+    expect(fiber.state).toBe(FiberState.FAILED)
+    expect(logged).toHaveBeenCalled()
+  })
+})
+
+describe('vendored cordis config validation', () => {
+  it('names the schema contract a plugin Config misses, before applying it', async () => {
+    const root = new Context()
+    vi.spyOn(root.logger, 'error').mockImplementation(() => {})
+    let applied = 0
+    // A plugin is whatever an imported module exported, so a `Config` that is
+    // not a Standard Schema reaches the registry as an ordinary object.
+    const plugin = { Config: {} as never, apply: () => { applied += 1 } }
+
+    await expect(Promise.resolve(root.plugin(plugin))).rejects.toThrow('plugin Config must implement Standard Schema V1')
+    expect(applied).toBe(0)
+  })
+})

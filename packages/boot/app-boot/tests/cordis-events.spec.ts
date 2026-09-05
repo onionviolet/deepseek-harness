@@ -115,3 +115,45 @@ describe('vendored cordis waterfall continuations', () => {
     expect(inner).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('vendored cordis update hooks', () => {
+  it('drops a fiber-scoped internal/update listener with the generation that registered it', async () => {
+    const root = new Context()
+    const seen: number[] = []
+    const fiber = root.plugin((ctx: Context) => {
+      ctx.on('internal/update', (config: { n: number }, _noSave: boolean, next: () => void | Promise<void>) => {
+        seen.push(config.n)
+        return next()
+      })
+    }, { n: 0 } as never)
+    await fiber
+
+    for (const n of [1, 2, 3]) {
+      void fiber.update({ n })
+      await fiber.await()
+    }
+
+    // The Fiber instance survives a reload, so a listener the previous
+    // generation registered would still be in the list and run again.
+    expect(seen).toEqual([1, 2, 3])
+  })
+
+  it('honours an explicit disposer for the current generation', async () => {
+    const root = new Context()
+    const seen: number[] = []
+    let dispose!: () => void
+    const fiber = root.plugin((ctx: Context) => {
+      dispose = ctx.on('internal/update', (config: { n: number }, _noSave: boolean, next: () => void | Promise<void>) => {
+        seen.push(config.n)
+        return next()
+      })
+    }, { n: 0 } as never)
+    await fiber
+
+    dispose()
+    void fiber.update({ n: 1 })
+    await fiber.await()
+
+    expect(seen).toEqual([])
+  })
+})

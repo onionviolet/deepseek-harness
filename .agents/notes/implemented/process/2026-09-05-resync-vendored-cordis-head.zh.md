@@ -51,3 +51,5 @@ loader 的那个修复本就出自本仓库：上游从一个 deepseek-harness �
 ## Related
 
 有四个开放的上游拉取请求，重新实现了本仓库已作为本地修改携带的行为——`#116`（为更早补丁插入的行再打补丁，修改 11）、`#47`（串行化的 include 写入，修改 14）、`#96` 与 `#91`（卸载期间的注册与 effect 排空，修改 6）。其中任何一个合并后，对应的日志条目就会像条目 13 刚刚那样退役。
+
+另有三个开放的拉取请求选择移植而非等待，见[单独的 Agent Note](../bug-fix/2026-09-05-port-open-cordis-fixes.md)：`#56`（fiber 作用域的 `internal/update` 监听器从不过期）、`#55`（未加隔离的 `internal/status` 观察者）与 `#104`（`Config` 并非 Standard Schema 时的模糊失败）。

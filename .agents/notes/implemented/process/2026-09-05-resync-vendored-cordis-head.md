@@ -51,3 +51,5 @@ Each carried fix is pinned by a test that fails against the pre-fix source, in `
 ## Related
 
 Four open upstream pull requests re-implement behavior this repository already carries as a local modification — `#116` (patching rows inserted by an earlier patch, modification 11), `#47` (serialized include writes, modification 14), `#96` and `#91` (registration and effect drain during unload, modification 6). When one merges, the corresponding log entry retires the way entry 13 just did.
+
+Three further open pull requests are ported rather than waited on, in [their own note](../bug-fix/2026-09-05-port-open-cordis-fixes.md): `#56` (fiber-scoped `internal/update` listeners never expired), `#55` (an uncontained `internal/status` observer) and `#104` (an opaque failure for a plugin `Config` that is not a Standard Schema).

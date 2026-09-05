@@ -141,7 +141,10 @@ export class EventsService {
       if (name === 'internal/update' && !options.global) {
         const hooks = this.fiber._hooks['internal/update'] ??= new DisposableList()
         const method = options.prepend ? 'unshift' : 'push'
-        return hooks[method](listener)
+        // As an effect, so the listener is removed when the fiber unloads: the
+        // Fiber instance survives a reload, and a bare list entry would leave
+        // the previous generation's closure registered forever.
+        return this.fiber.effect(() => hooks[method](listener), 'ctx.on("internal/update")')
       }
     })
 
