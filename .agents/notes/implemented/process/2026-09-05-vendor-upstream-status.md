@@ -14,7 +14,7 @@ Two of the recorded upstreams could not be reached at all. The `cosmokit/` and `
 
 `pnpm run vendor:status` parses the manifest table and asks each upstream repository, through the GitHub REST API, which commits since the recorded one touch that package's `src` prefix. It prints one line per row — up to date, n commits behind with their subjects, or a comparison failure — and `--check` exits non-zero when any row is behind, which is the shape a scheduled job wants.
 
-The tool reports drift; it does not gate a commit. Vendored drift is not caused by the change under review, and a network call cannot sit in `hygiene` or a pre-commit hook. Making it a command that a maintainer or a scheduled run invokes keeps the offline gates offline.
+The tool reports drift; it does not gate a commit. Vendored drift is not caused by the change under review, and a network call cannot sit in `hygiene` or a pre-commit hook. Making it a command that a maintainer or a scheduled run invokes keeps the offline gates offline. `.github/workflows/vendor-drift.yml` runs `--check` weekly, on Mondays: an upstream that moved yesterday does not need answering today, and a per-push job would report the same answer every run until someone acted on it, which is how a signal gets ignored.
 
 The source prefix, not the package directory, decides relevance: an upstream README or test change is not drift for a vendored copy that ships `src` only. Manifest parsing, prefix derivation, commit filtering and report rendering are pure functions over an injected comparison fetcher, so `scripts/vendor-upstream-status.spec.ts` covers them without a network, and one case parses the manifest this repository actually ships — a table-format change fails that case rather than silently reporting zero rows.
 
@@ -30,5 +30,6 @@ The tool's first run found the two unreachable rows, and they are repaired by co
 ## Consequences
 
 - `pnpm run vendor:status` is the first thing the sync procedure tells you to run, so a sync starts from the list of upstream commits rather than from a diff someone assembled by hand.
-- All nine rows now resolve and report up to date, so the command exits zero and `--check` is meaningful to schedule. A row that stops resolving is a comparison failure, which fails `--check` the same way being behind does.
+- All nine rows now resolve and report up to date, so the command exits zero and the weekly job is green on arrival. A row that stops resolving is a comparison failure, which fails `--check` the same way being behind does.
+- A red weekly run is a TODO, not a broken build: it means upstream moved, and the fix is the sync procedure, not a revert. Nothing else depends on that job, so it cannot block a release.
 - The GitHub API is called without a token unless `GITHUB_TOKEN` or `GH_TOKEN` is set. Nine rows fit inside the unauthenticated rate limit; a repository far behind reports at most the first 100 commits of the range, which is enough to decide to sync.

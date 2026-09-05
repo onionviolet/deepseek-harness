@@ -1,0 +1,58 @@
+name: Vendor drift (upstream status)
+
+# Asks each upstream named in vendor/README.md which commits since the recorded
+# one touch that package's `src`, and fails when any vendored package is behind
+# or its upstream can no longer be reached (`pnpm run vendor:status --check`).
+#
+# This is the check nothing performed until 2026-09: the manifest was written
+# and never read back, so twelve upstream `src` commits accumulated, one of them
+# a fix upstream had ported FROM this repository
+# (.agents/notes/implemented/process/2026-09-05-vendor-upstream-status.md).
+#
+# Weekly, not per-push: vendored drift is caused by upstream, never by the
+# commit under review, so a push or pull_request trigger would report the same
+# answer on every run and train reviewers to ignore it. A failure here is a
+# TODO, not a broken build — act on it with the sync procedure in
+# vendor/README.md.
+#
+# Note: scheduled triggers are auto-disabled after 60 days of repo inactivity;
+# workflow_dispatch is the backstop.
+on:
+  workflow_dispatch:
+  schedule:
+    # 06:23 UTC Mondays = 14:23 Asia/Shanghai — off the top-of-hour cron stampede.
+    - cron: '23 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# Least privilege: reads this repository, and reads public upstream repositories
+# through the GitHub API with the job token.
+permissions:
+  contents: read
+
+jobs:
+  vendor-status:
+    runs-on: ubuntu-latest
+    name: vendor status
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # The job token lifts the unauthenticated API rate limit; the script needs
+      # no repository write and reads only public upstreams.
+      - name: Compare every vendored package against its upstream
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm run vendor:status -- --check
