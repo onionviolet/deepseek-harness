@@ -64,6 +64,42 @@ describe('vendored cordis wrapped-fiber lifecycle', () => {
   })
 })
 
+describe('vendored cordis generations', () => {
+  it('discards a suspended load that a newer update superseded', async () => {
+    const root = new Context()
+    const releases: (() => void)[] = []
+    const marks: number[] = []
+    let applied = 0
+    const fiber = root.plugin(async (ctx: Context) => {
+      applied += 1
+      const generation = applied
+      await new Promise<void>(resolve => releases.push(resolve))
+      ctx.effect(() => {
+        marks.push(generation)
+        return () => { marks.push(-generation) }
+      })
+    })
+    await new Promise(resolve => setTimeout(resolve))
+    expect(applied).toBe(1)
+
+    // The update takes the fiber to INACTIVE and straight back, so the
+    // suspended first attempt wakes to the epoch value it captured. Only the
+    // generation separates it from the attempt that owns the fiber now.
+    void fiber.update({})
+    await new Promise(resolve => setTimeout(resolve))
+    for (const release of releases.splice(0)) release()
+    await new Promise(resolve => setTimeout(resolve))
+    for (const release of releases.splice(0)) release()
+    await fiber.await()
+
+    // The superseded attempt's effect is unwound rather than kept, and the
+    // update's own generation runs: without this the update is silently lost.
+    expect(applied).toBe(2)
+    expect(marks).toEqual([1, -1, 2])
+    expect(fiber.state).toBe(FiberState.ACTIVE)
+  })
+})
+
 describe('vendored cordis dispatch', () => {
   it('applies listeners with the dispatch this-argument', () => {
     const root = new Context()

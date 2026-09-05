@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-05-port-open-cordis-fixes.md
-2026-09-05-port-open-cordis-fixes.md: 65414017dca3109dedb6c34b299ab88d4b0b9dac
-2026-09-05-port-open-cordis-fixes.zh.md: c1298688e9457ce8c1066692918a9f2b5f6a6cc8
+2026-09-05-port-open-cordis-fixes.md: 367603c15a8ab3f97f3f972c372e51a4a55390c4
+2026-09-05-port-open-cordis-fixes.zh.md: 547299c2109892e51288e3544738ccbbf6fe8cfa

@@ -104,7 +104,7 @@ export namespace Plugin {
     Config?: StandardSchemaV1<any, T>
     /** Services the plugin requires; it only loads while all are available. */
     inject?: Inject
-    /** Service name(s) the plugin provides (read by `Service` and by loaders). */
+    /** Service name(s) every successful fiber of this plugin guarantees to provide. */
     provide?: string | string[]
     /** Service names whose intercept config the plugin declares it consumes. */
     intercept?: Dict<boolean>
@@ -142,6 +142,200 @@ export namespace Plugin {
     callback: globalThis.Function
     /** Standard-schema validator applied to each fiber's config. */
     Config?: StandardSchemaV1
+  }
+
+  /** Dependency declarations of one plugin, after loaders have extended them. */
+  export interface Meta {
+    /** Resolved service dependencies: service name → intercept config. */
+    inject: Dict<any>
+    /** Service names the plugin guarantees to provide once loaded. */
+    provide: string[]
+  }
+
+  /** A plugin about to start, as the dependency graph sees it. */
+  export interface Candidate {
+    /** The executable entrypoint (registry identity key). */
+    callback: globalThis.Function
+    /** The context the plugin would load under. */
+    parent: Context
+    /** Dependency declarations, including loader additions. */
+    meta: Meta
+    /** The fiber this candidate replaces, when validating a reload. */
+    replace?: Fiber
+    /** Display name used in cycle and duplicate-provider diagnostics. */
+    name: string
+  }
+}
+
+declare module './events.ts' {
+  export interface Events {
+    'internal/plugin-meta'(meta: Plugin.Meta): void
+  }
+}
+
+interface DependencyNode {
+  id: object
+  name: string
+  parent: Context
+  inject: string[]
+  provide: string[]
+}
+
+interface ResolvedDependencyNode {
+  id: object
+  name: string
+  inject: Map<symbol, string>
+  provide: Map<symbol, string>
+}
+
+export class CircularDependencyError extends Error {
+  name = 'CircularDependencyError'
+
+  constructor(public cycle: string[]) {
+    super(`circular plugin dependency: ${cycle.join(' -> ')}`)
+  }
+}
+
+class DependencyGraph {
+  private nodes = new Map<Fiber, DependencyNode>()
+  private dynamic = new Map<Fiber, Set<{ ctx: Context, name: string }>>()
+
+  constructor(private registry: RegistryService) {}
+
+  private resolveToken(ctx: Context, name: string) {
+    ctx.root[Context.isolate][name] ??= Symbol(name)
+    return ctx[Context.isolate][name]
+  }
+
+  private createNode(candidate: Plugin.Candidate): DependencyNode {
+    return {
+      id: candidate,
+      name: candidate.name,
+      parent: candidate.parent,
+      inject: Object.keys(candidate.meta.inject),
+      provide: candidate.meta.provide,
+    }
+  }
+
+  private resolveNode(node: DependencyNode): ResolvedDependencyNode {
+    const inject = new Map<symbol, string>()
+    const provide = new Map<symbol, string>()
+    for (const name of node.inject) {
+      inject.set(this.resolveToken(node.parent, name), name)
+    }
+    for (const name of node.provide) {
+      provide.set(this.resolveToken(node.parent, name), name)
+    }
+    return { id: node.id, name: node.name, inject, provide }
+  }
+
+  private collectNodes(candidates: Plugin.Candidate[]) {
+    const replacements = new Set(candidates.map(candidate => candidate.replace).filter(Boolean))
+    const nodes = [...this.nodes]
+      .filter(([fiber]) => !replacements.has(fiber))
+      .map(([fiber, node]) => {
+        const resolved = this.resolveNode(node)
+        for (const entry of this.dynamic.get(fiber) ?? []) {
+          resolved.provide.set(this.resolveToken(entry.ctx, entry.name), entry.name)
+        }
+        return resolved
+      })
+    for (const [fiber, dynamic] of this.dynamic) {
+      if (this.nodes.has(fiber) || replacements.has(fiber)) continue
+      const provide = new Map<symbol, string>()
+      for (const entry of dynamic) {
+        provide.set(this.resolveToken(entry.ctx, entry.name), entry.name)
+      }
+      nodes.push({
+        id: fiber,
+        name: fiber.name,
+        inject: new Map(),
+        provide,
+      })
+    }
+    nodes.push(...candidates.map(candidate => this.resolveNode(this.createNode(candidate))))
+    return nodes
+  }
+
+  validate(candidates: Plugin.Candidate[]) {
+    const nodes = this.collectNodes(candidates)
+    const providers = new Map<symbol, ResolvedDependencyNode>()
+    for (const node of nodes) {
+      for (const [token, name] of node.provide) {
+        const oldNode = providers.get(token)
+        if (oldNode && oldNode.id !== node.id) {
+          throw new Error(`service "${name}" is provided by both <${oldNode.name}> and <${node.name}>`)
+        }
+        providers.set(token, node)
+      }
+    }
+
+    const edges = new Map<ResolvedDependencyNode, ResolvedDependencyNode[]>()
+    for (const node of nodes) {
+      const targets: ResolvedDependencyNode[] = []
+      for (const token of node.inject.keys()) {
+        const target = providers.get(token)
+        if (target) targets.push(target)
+      }
+      edges.set(node, targets)
+    }
+
+    const visited = new Set<ResolvedDependencyNode>()
+    const visiting = new Map<ResolvedDependencyNode, number>()
+    const stack: ResolvedDependencyNode[] = []
+    const visit = (node: ResolvedDependencyNode): void => {
+      if (visited.has(node)) return
+      const index = visiting.get(node)
+      if (index !== undefined) {
+        throw new CircularDependencyError([...stack.slice(index), node].map(node => node.name))
+      }
+      visiting.set(node, stack.length)
+      stack.push(node)
+      for (const target of edges.get(node) ?? []) visit(target)
+      stack.pop()
+      visiting.delete(node)
+      visited.add(node)
+    }
+    for (const node of nodes) visit(node)
+  }
+
+  add(fiber: Fiber, candidate: Plugin.Candidate) {
+    const node = this.createNode(candidate)
+    node.id = fiber
+    this.nodes.set(fiber, node)
+  }
+
+  delete(fiber: Fiber) {
+    this.nodes.delete(fiber)
+    this.dynamic.delete(fiber)
+  }
+
+  provide(fiber: Fiber, ctx: Context, name: string) {
+    const entry = { ctx, name }
+    const dynamic = this.dynamic.get(fiber) ?? new Set<{ ctx: Context, name: string }>()
+    dynamic.add(entry)
+    this.dynamic.set(fiber, dynamic)
+    try {
+      this.validate([])
+    } catch (error) {
+      dynamic.delete(entry)
+      if (!dynamic.size) this.dynamic.delete(fiber)
+      throw error
+    }
+    return () => {
+      dynamic.delete(entry)
+      if (!dynamic.size) this.dynamic.delete(fiber)
+    }
+  }
+
+  assertProvides(fiber: Fiber) {
+    const node = this.nodes.get(fiber)
+    if (!node) return
+    for (const name of node.provide) {
+      const token = this.resolveToken(node.parent, name)
+      if (this.registry.ctx.reflect.store[token]?.fiber === fiber) continue
+      throw new Error(`plugin <${node.name}> declared service "${name}" but did not provide it`)
+    }
   }
 }
 
@@ -195,6 +389,7 @@ declare module './context.ts' {
 export class RegistryService {
   private _counter = 0
   private _internal = new Map<Function, Plugin.Runtime>()
+  private _graph = new DependencyGraph(this)
 
   constructor(public ctx: Context) {
     defineProperty(this, symbols.tracker, {
@@ -302,11 +497,84 @@ export class RegistryService {
   }
 
   /**
+   * Resolve a plugin into a dependency-graph candidate without starting it.
+   *
+   * @param plugin — a function, class, or `{ apply }` object plugin.
+   * @param replace — the fiber this candidate would replace, for validation.
+   * @returns the candidate: callback, parent context, resolved meta, and name.
+   * @throws when `plugin` is not a supported shape, or the current fiber is disposed.
+   */
+  prepare(plugin: Plugin, replace?: Fiber): Plugin.Candidate {
+    const callback = this.resolve(plugin)
+    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
+    this.ctx.fiber.assertActive()
+
+    let name = plugin.name
+    if (name === 'apply') name = undefined
+    const provide = Array.isArray(plugin.provide)
+      ? [...plugin.provide]
+      : plugin.provide ? [plugin.provide] : []
+    const meta: Plugin.Meta = {
+      inject: Inject.resolve(plugin.inject),
+      provide,
+    }
+    this.ctx.emit(this.ctx, 'internal/plugin-meta', meta)
+    return {
+      callback,
+      parent: this.ctx,
+      meta,
+      replace,
+      name: name || callback.name || 'anonymous',
+    }
+  }
+
+  /**
+   * Reject candidates that would close a dependency cycle or duplicate a provider.
+   *
+   * @param candidates — plugins about to start, alongside the live graph.
+   * @throws {CircularDependencyError} when the candidates close an inject cycle.
+   * @throws when two nodes would provide the same service token.
+   */
+  validate(candidates: Plugin.Candidate[]) {
+    this._graph.validate(candidates)
+  }
+
+  /**
+   * Assert a loaded fiber provided every service its plugin declared.
+   *
+   * @param fiber — the fiber whose plugin body has just returned.
+   * @throws when a declared `provide` name has no implementation owned by this fiber.
+   */
+  assertProvides(fiber: Fiber) {
+    this._graph.assertProvides(fiber)
+  }
+
+  /**
+   * Drop a disposed fiber from the dependency graph.
+   * @param fiber — the fiber being disposed.
+   */
+  _release(fiber: Fiber) {
+    this._graph.delete(fiber)
+  }
+
+  /**
+   * Record a service a fiber provides at runtime rather than by declaration.
+   * @param fiber — the providing fiber.
+   * @param name — the service name.
+   * @returns a disposer that forgets the runtime provision.
+   * @throws {CircularDependencyError} when the provision closes an inject cycle.
+   */
+  _provide(fiber: Fiber, name: string) {
+    return this._graph.provide(fiber, this.ctx, name)
+  }
+
+  /**
    * Start a plugin in the current context and return its fiber.
    *
    * Creates (or reuses) the plugin's runtime record, then starts a new fiber
-   * under the current context. Throws if `plugin` is not a supported shape or
-   * if the current fiber is already disposed.
+   * under the current context. Throws if `plugin` is not a supported shape,
+   * if the current fiber is already disposed, or if the registration would
+   * close a dependency cycle.
    *
    * @param plugin — a function, class, or `{ apply }` object plugin.
    * @param config — the plugin config, validated against its `Config` schema.
@@ -314,20 +582,19 @@ export class RegistryService {
    * @returns the fiber; awaiting it settles once loading finished.
    */
   plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack()) {
-    // check if it's a valid plugin
-    const callback = this.resolve(plugin)
-    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
-    this.ctx.fiber.assertActive()
+    const candidate = this.prepare(plugin)
+    this.validate([candidate])
+    const { callback } = candidate
 
     let runtime = this._internal.get(callback)
     if (!runtime) {
-      let name = plugin.name
-      if (name === 'apply') name = undefined
+      const name = candidate.name === 'anonymous' ? undefined : candidate.name
       runtime = { name, callback, fibers: new DisposableList(), Config: plugin.Config }
       this._internal.set(callback, runtime)
     }
 
-    const fiber = new Fiber(this.ctx, config, Inject.resolve(plugin.inject), runtime, getOuterStack)
+    const fiber = new Fiber(this.ctx, config, candidate.meta.inject, runtime, getOuterStack)
+    this._graph.add(fiber, candidate)
     const wrapped = Object.create(fiber) as Fiber & PromiseLike<Fiber>
     wrapped.then = (onFulfilled, onRejected) => {
       return fiber.await().then(onFulfilled, onRejected)

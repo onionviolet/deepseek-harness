@@ -128,3 +128,28 @@ describe('vendored cordis config validation', () => {
     expect(applied).toBe(0)
   })
 })
+
+describe('vendored cordis dependency graph', () => {
+  it('rejects a registration that closes an inject cycle, naming the cycle', async () => {
+    const root = new Context()
+    vi.spyOn(root.logger, 'error').mockImplementation(() => {})
+    const alpha = { name: 'alpha', inject: ['beta'], provide: 'alpha', apply: (ctx: Context) => { ctx.provide('alpha', {}) } }
+    const beta = { name: 'beta', inject: ['alpha'], provide: 'beta', apply: (ctx: Context) => { ctx.provide('beta', {}) } }
+
+    // The first half of the cycle is legal: it simply waits for `beta`.
+    const first = root.plugin(alpha)
+    expect(first.state).toBe(FiberState.PENDING)
+
+    // Closing it is not: both fibers would wait forever with no diagnostic.
+    expect(() => root.plugin(beta)).toThrow('circular plugin dependency: alpha -> beta -> alpha')
+  })
+
+  it('fails a plugin that declares a service it never provides', async () => {
+    const root = new Context()
+    vi.spyOn(root.logger, 'error').mockImplementation(() => {})
+    const fiber = root.plugin({ name: 'liar', provide: 'promised', apply: () => {} })
+
+    await expect(Promise.resolve(fiber)).rejects.toThrow('plugin <liar> declared service "promised" but did not provide it')
+    expect(fiber.state).toBe(FiberState.FAILED)
+  })
+})

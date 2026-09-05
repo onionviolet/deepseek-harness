@@ -32,7 +32,7 @@ inject(deps: Inject, callback: Plugin.Function<void>): Fiber & PromiseLike<Fiber
 
 **返回** fiber；对其执行 await 会在加载完成后结束等待。
 
-[源码](../../vendor/cordis/src/registry.ts#L176)
+[源码](../../vendor/cordis/src/registry.ts#L370)
 
 ### ctx.plugin(plugin, ...args)
 
@@ -55,7 +55,7 @@ plugin<P extends Plugin>(plugin: P, ...args: Spread<GetPluginConfig<P>>): Fiber 
 
 **返回** fiber；对其执行 await 会在加载完成后结束等待（如果发生配置错误或启动错误，则会被拒绝）。
 
-[源码](../../vendor/cordis/src/registry.ts#L185)
+[源码](../../vendor/cordis/src/registry.ts#L379)
 
 ## Plugin
 
@@ -78,7 +78,7 @@ namespace Plugin {
     Config?: StandardSchemaV1<any, T>
     /** Services the plugin requires; it only loads while all are available. */
     inject?: Inject
-    /** Service name(s) the plugin provides (read by `Service` and by loaders). */
+    /** Service name(s) every successful fiber of this plugin guarantees to provide. */
     provide?: string | string[]
     /** Service names whose intercept config the plugin declares it consumes. */
     intercept?: Dict<boolean>
@@ -116,6 +116,28 @@ namespace Plugin {
     callback: globalThis.Function
     /** Standard-schema validator applied to each fiber's config. */
     Config?: StandardSchemaV1
+  }
+
+  /** Dependency declarations of one plugin, after loaders have extended them. */
+  export interface Meta {
+    /** Resolved service dependencies: service name → intercept config. */
+    inject: Dict<any>
+    /** Service names the plugin guarantees to provide once loaded. */
+    provide: string[]
+  }
+
+  /** A plugin about to start, as the dependency graph sees it. */
+  export interface Candidate {
+    /** The executable entrypoint (registry identity key). */
+    callback: globalThis.Function
+    /** The context the plugin would load under. */
+    parent: Context
+    /** Dependency declarations, including loader additions. */
+    meta: Meta
+    /** The fiber this candidate replaces, when validating a reload. */
+    replace?: Fiber
+    /** Display name used in cycle and duplicate-provider diagnostics. */
+    name: string
   }
 }
 ```

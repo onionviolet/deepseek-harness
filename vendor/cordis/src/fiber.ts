@@ -108,6 +108,12 @@ export interface EffectMeta {
 
 interface EffectRunner<T> {
   epoch: T
+  /**
+   * Identity of the in-flight attempt. The epoch is the DESIRED state, so an
+   * `A → B → A` sequence returns to the value a suspended attempt captured;
+   * the generation separates that attempt from the one that owns the fiber now.
+   */
+  generation?: number
   execute: () => any
   collect: (dispose: Disposable) => void
   getOuterStack: () => string[]
@@ -235,6 +241,7 @@ export class Fiber {
   // Whether _error came from resolving config against injected services
   // rather than from the plugin body; see _setEpoch().
   private _configError = false
+  private _generation = 0
   private _runner: EffectRunner<string>
   private _store: Dict<Impl> = Object.create(null)
 
@@ -295,6 +302,7 @@ export class Fiber {
         const remove = runtime.fibers.push(this)
         return async () => {
           this.uid = null
+          this.ctx.registry._release(this)
           emitPluginDisposed(this.context, this)
           if (this.ctx.registry.has(runtime.callback)) {
             remove()
@@ -384,6 +392,7 @@ export class Fiber {
 
   private _execute<T>(runner: EffectRunner<T>) {
     const oldEpoch = runner.epoch
+    const oldGeneration = runner.generation
     return composeError((info) => {
       const safeCollect = (dispose: void | Disposable) => {
         if (typeof dispose === 'function') {
@@ -416,7 +425,7 @@ export class Fiber {
           await Promise.resolve()
           info.error = new Error()
           while (true) {
-            if (runner.epoch !== oldEpoch) return
+            if (runner.epoch !== oldEpoch || runner.generation !== oldGeneration) return
             const result = await iter.next()
             safeCollect(result.value)
             if (result.done) return
@@ -660,6 +669,7 @@ export class Fiber {
     // rather than a retry of the same one.
     if (this._error && !this._configError) return
     this._runner.epoch = epoch
+    this._runner.generation = ++this._generation
     if (this.inertia) return
     this._updateState(() => {
       if (epoch !== INACTIVE && oldEpoch === INACTIVE) {
@@ -680,12 +690,16 @@ export class Fiber {
   private async _reload() {
     this.store = { ...this._store }
     const oldEpoch = this._runner.epoch
+    const oldGeneration = this._runner.generation
+    // This attempt still owns the fiber: the epoch is the desired state, and
+    // the generation separates two attempts that share one epoch value.
+    const current = () => this._runner.epoch === oldEpoch && this._runner.generation === oldGeneration
     try {
       await Promise.resolve()
       // A disposer queued before this checkpoint may already have invalidated
-      // the load. Do not run plugin code for a stale epoch; the state update
+      // the load. Do not run plugin code for a stale attempt; the state update
       // below will drain any effects collected while the fiber was PENDING.
-      if (this._runner.epoch === oldEpoch) {
+      if (current()) {
         try {
           this.config = this._resolveConfig(this._config)
           this._configError = false
@@ -694,16 +708,24 @@ export class Fiber {
           throw reason
         }
         await this._execute(this._runner)
+        this.ctx.registry.assertProvides(this)
         this._error = undefined
       }
     } catch (reason) {
       // impl guarantees that the error is non-null (?)
       this.ctx.logger.error(reason)
-      this._error = reason
-      this._runner.epoch = INACTIVE
+      // A superseded attempt may still finish and report its failure, but it
+      // does not own the fiber any more: reporting it as the current state
+      // would fail a generation that has not run yet. Disposal is the
+      // exception — no later attempt will run, and a caller awaiting this load
+      // (a setup aborted by its own disposal) still has to see why it ended.
+      if (current() || this._runner.epoch === INACTIVE) {
+        this._error = reason
+        this._runner.epoch = INACTIVE
+      }
     }
     this._updateState(() => {
-      if (this._runner.epoch === oldEpoch) {
+      if (current()) {
         this.inertia = undefined
       } else {
         this.inertia = this._unload()

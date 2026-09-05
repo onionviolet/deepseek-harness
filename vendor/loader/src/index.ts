@@ -118,8 +118,6 @@ export class Loader extends EntryTree {
       // 1. set `fiber.entry`
       if (fiber.parent[Entry.key] && !fiber.entry) {
         fiber.entry = fiber.parent[Entry.key]
-        // FIXME merge config
-        Inject.resolve(fiber.entry!.options.inject, fiber.inject)
       }
 
       // 2. handle self-dispose
@@ -155,6 +153,12 @@ export class Loader extends EntryTree {
       fiber.entry.options.disabled = true
       fiber.entry.parent.tree.write()
     })
+
+    ctx.on('internal/plugin-meta', function (this: Context, meta) {
+      const entry: Entry | undefined = this[Entry.key]
+      if (!entry) return
+      Inject.resolve(entry.options.inject, meta.inject)
+    }, { global: true })
 
     ctx.plugin(isolate)
   }
