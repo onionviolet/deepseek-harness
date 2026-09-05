@@ -19,10 +19,12 @@ const valid = (): PromptAssembly => ({
 })
 
 async function assemble(ctx: Context, result: PromptAssembly): Promise<PromptAssembly> {
+  // The `never` thisArg opts out of the scope-carrier overload, so the
+  // dispatch result comes back untyped and is restated here.
   return ctx.waterfall(
     ctx as never, 'system-prompt/assemble', valid(), {},
     () => Promise.resolve(result),
-  )
+  ) as Promise<PromptAssembly>
 }
 
 describe('system-prompt invariants', () => {

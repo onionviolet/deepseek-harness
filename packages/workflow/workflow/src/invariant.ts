@@ -67,6 +67,8 @@ const install: InvariantInstaller = (ctx, fail) => {
   const stagedEnds = new WeakSet<WorkflowResultInfo>()
 
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
+    // Symbol-keyed events carry no declared signature, so none of them is a workflow event.
+    if (typeof eventName !== 'string') return
     if (eventName === 'workflow/start') {
       const info = args[0] as WorkflowRunInfo
       if (String(info.id).length === 0 || info.meta.name.length === 0 || info.meta.description.length === 0) {

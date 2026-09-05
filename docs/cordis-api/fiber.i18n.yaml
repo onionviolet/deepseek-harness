@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cordis-api/fiber.md
-fiber.md: a58868b743d560f865a8f966396d57858a3c3fed
-fiber.zh.md: 4e2070114a08a7d3a446bf5b25aa4aaab161753f
+fiber.md: 98b5522aa3d1e95a43ad9fd6744e97de7fbd51d1
+fiber.zh.md: 4c874a0133730f07f52bc046e698dd682a5681b5

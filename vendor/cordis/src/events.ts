@@ -1,5 +1,5 @@
 import { defineProperty } from '@deepseek-ai/cosmokit'
-import type { Promisify } from '@deepseek-ai/cosmokit'
+import type { Awaitable, Promisify } from '@deepseek-ai/cosmokit'
 import { Context } from './context.ts'
 import { Fiber, FiberState } from './fiber.ts'
 import { DisposableList, symbols } from './utils.ts'
@@ -129,7 +129,7 @@ export interface Hook extends EventOptions {
  * dispatch and automatically disposes listeners with their owning fiber.
  */
 export class EventsService {
-  _hooks: Record<keyof any, Hook[]> = {}
+  _hooks: Record<keyof any, Hook[]> = Object.create(null)
 
   constructor(private ctx: Context) {
     defineProperty(this, symbols.tracker, {
@@ -164,8 +164,8 @@ export class EventsService {
    */
   private _resolve(type: string, args: any[]) {
     const thisArg = typeof args[0] === 'object' || typeof args[0] === 'function' ? args.shift() : null
-    const name: string = args.shift()
-    if (!name.startsWith('internal/') && this._hooks['internal/dispatch']?.length) {
+    const name: string | symbol = args.shift()
+    if ((typeof name !== 'string' || !name.startsWith('internal/')) && this._hooks['internal/dispatch']?.length) {
       this.emit('internal/dispatch', type, name, args, thisArg)
     }
     const filter = thisArg?.[Context.filter]
@@ -253,42 +253,52 @@ export class EventsService {
   waterfall(...args: any[]) {
     const [thisArg, callbacks] = this._resolve('waterfall', args)
     const inner = args.pop()
-    const next = () => {
+    const dispatch = () => {
       const callback = callbacks.shift()
-      return callback ? Reflect.apply(callback, thisArg, args) : inner(...args)
+      if (!callback) return inner()
+      let called = false
+      const next = () => {
+        if (called) throw new Error('next() called multiple times')
+        called = true
+        return dispatch()
+      }
+      return Reflect.apply(callback, thisArg, [...args, next])
     }
-    args.push(next)
-    return next()
+    return dispatch()
   }
 
   /**
    * Store a listener record as an effect on the current fiber.
    *
    * @param label — effect label shown in fiber diagnostics.
-   * @param hooks — the listener list for one event.
+   * @param name — the event name the listener is stored under.
    * @param callback — the listener to store.
    * @param options — placement and filtering options.
    * @returns a disposer that unregisters the listener.
    */
-  register(label: string, hooks: Hook[], callback: any, options: EventOptions): () => void {
+  private register(label: string, name: string | symbol, callback: any, options: EventOptions): () => void {
     const method = options.prepend ? 'unshift' : 'push'
     return this.ctx.fiber.effect(() => {
+      const hooks = this._hooks[name] ??= []
       hooks[method]({ ctx: this.ctx, callback, ...options })
-      return () => this.unregister(hooks, callback)
+      return () => this.unregister(name, callback)
     }, label)
   }
 
   /**
    * Remove a stored listener record.
    *
-   * @param hooks — the listener list for one event.
+   * @param name — the event name the listener is stored under.
    * @param callback — the listener to remove.
    * @returns `true` if the listener was found and removed.
    */
-  unregister(hooks: Hook[], callback: any) {
+  private unregister(name: string | symbol, callback: any) {
+    const hooks = this._hooks[name]
+    if (!hooks) return
     const index = hooks.findIndex(hook => hook.callback === callback)
     if (index >= 0) {
       hooks.splice(index, 1)
+      if (!hooks.length) delete this._hooks[name]
       return true
     }
   }
@@ -315,9 +325,8 @@ export class EventsService {
     const result = this.bail(this.ctx, 'internal/listener', name, listener, options)
     if (result) return result
 
-    const hooks = this._hooks[name] ||= []
     const label = `ctx.on(${typeof name === 'string' ? JSON.stringify(name) : name.toString()})`
-    return this.register(label, hooks, listener, options)
+    return this.register(label, name, listener, options)
   }
 
   /**
@@ -328,7 +337,7 @@ export class EventsService {
    * @param options — listener options; a boolean is shorthand for `prepend`.
    * @returns a disposer removing the listener; `true` if it was still registered.
    */
-  once(name: string, listener: (...args: any) => any, options?: boolean | EventOptions) {
+  once(name: string | symbol, listener: (...args: any) => any, options?: boolean | EventOptions) {
     const dispose = this.on(name, function (...args: any[]) {
       dispose()
       return listener.apply(this, args)
@@ -346,6 +355,8 @@ export class EventsService {
  * diagnostics before public events are delivered.
  */
 export interface Events {
+  /** Symbol-keyed events carry no declared signature; dispatch passes their arguments through. */
+  [key: symbol]: (...args: any[]) => any
   /** A plugin fiber was created or its uid was cleared on disposal. */
   'internal/plugin'(fiber: Fiber): void
   /** A fiber changed lifecycle state; receives the fiber and its previous state. */
@@ -359,7 +370,7 @@ export interface Events {
   /** Interception hook for a service binding (no core producer). */
   'internal/service'(this: Context, name: string, value: any): void
   /** Waterfall: a fiber config update is being applied; skip `next()` to veto. */
-  'internal/update'(this: Fiber, config: any, noSave: boolean, next: () => void | Promise<void>): void | Promise<void>
+  'internal/update'(this: Fiber, config: any, noSave: boolean, next: () => Awaitable<void>): Awaitable<void>
   /** Waterfall: a service is being read through the context proxy. */
   'internal/get'(ctx: Context, name: string, error: Error, next: () => any): any
   /** Waterfall: a service is being written through the context proxy. */
@@ -367,5 +378,5 @@ export interface Events {
   /** Bail: a listener is being registered; a non-null result replaces registration. */
   'internal/listener'(this: Context, name: string, listener: any, prepend: boolean): void
   /** An event is being dispatched to listeners (fired for non-internal events only). */
-  'internal/dispatch'(mode: DispatchMode, name: string, args: any[], thisArg: any): void
+  'internal/dispatch'(mode: DispatchMode, name: string | symbol, args: any[], thisArg: any): void
 }

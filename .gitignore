@@ -18,6 +18,7 @@ coverage/
 oxlint-contract-*.ts
 .humanize/
 tmp/
+packages/boot/app-boot/tests/.hmr-reload-*/
 .claude/commands/
 .claude/launch.json
 .claude/settings.json

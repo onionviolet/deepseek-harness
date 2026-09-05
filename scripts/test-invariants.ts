@@ -49,6 +49,10 @@ export const testInvariantCompanions: Readonly<Record<string, () => Promise<Test
 const MANUAL_INVARIANT_TEST_EXCEPTIONS = [
   '/packages/runtime-diagnostics/invariants/tests/service.spec.ts',
   '/packages/examples/agent-spine-demo/tests/agent-core.spec.ts',
+  // Vendored-framework failure regressions register plugins that fail on
+  // purpose; joining them to the shared startup barrier would fail every
+  // other root plugin in the suite.
+  '/packages/boot/app-boot/tests/cordis-failure.spec.ts',
 ] as const
 
 interface InvariantHost {

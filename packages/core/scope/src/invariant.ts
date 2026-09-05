@@ -15,6 +15,8 @@ export const inject = ['invariants']
 /** Install the scoped-dispatch contribution into its child registration fiber. */
 const install: InvariantInstaller = (ctx, fail) => {
   ctx.on('internal/dispatch', (_mode, eventName, args, thisArg) => {
+    // Symbol-keyed events carry no declared signature, so none of them is a scoped event.
+    if (typeof eventName !== 'string') return
     const subjectOf = scopedSubjectResolverFor(eventName)
     if (subjectOf === undefined) return
     if (!isScopeCarrier(thisArg)) {

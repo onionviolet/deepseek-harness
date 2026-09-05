@@ -32,6 +32,13 @@ describe('scoped-dispatch invariants', () => {
       .toThrow(/dispatched without a scope carrier/)
   })
 
+  it('ignores a symbol-named dispatch', async () => {
+    const ctx = await setup()
+    // Symbol-keyed events carry no declared signature, so none of them is scoped.
+    const event = Symbol('probe')
+    expect(() => { (ctx.emit as unknown as (name: symbol) => void)(event) }).not.toThrow()
+  })
+
   it('checks every generated subject resolver against the carrier key', async () => {
     const ctx = await setup()
     const agent = { id: 'a1' } as unknown as Agent

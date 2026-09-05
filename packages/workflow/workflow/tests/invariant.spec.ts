@@ -44,6 +44,13 @@ const result = (overrides: Partial<WorkflowResultInfo> = {}): WorkflowResultInfo
 })
 
 describe('workflow invariants', () => {
+  it('ignores a symbol-named dispatch', async () => {
+    const ctx = await setup()
+    // Symbol-keyed events carry no declared signature, so none of them is a workflow event.
+    const event = Symbol('probe')
+    expect(() => { (ctx.emit as unknown as (name: symbol) => void)(event) }).not.toThrow()
+  })
+
   it('accepts a complete workflow and child lifecycle', async () => {
     const ctx = await setup()
     const run = info()

@@ -206,6 +206,9 @@ export class Fiber {
   protected context: Context
 
   private _error: any
+  // Whether _error came from resolving config against injected services
+  // rather than from the plugin body; see _setEpoch().
+  private _configError = false
   private _runner: EffectRunner<string>
   private _store: Dict<Impl> = Object.create(null)
 
@@ -625,6 +628,11 @@ export class Fiber {
   private _setEpoch(epoch: string) {
     const oldEpoch = this._runner.epoch
     if (epoch === oldEpoch) return
+    // A failed fiber only recovers through update(), which clears _error.
+    // A config-resolution failure is the exception: lazy resolution reads the
+    // injected services this epoch names, so a changed epoch is a new attempt
+    // rather than a retry of the same one.
+    if (this._error && !this._configError) return
     this._runner.epoch = epoch
     if (this.inertia) return
     this._updateState(() => {
@@ -652,7 +660,13 @@ export class Fiber {
       // the load. Do not run plugin code for a stale epoch; the state update
       // below will drain any effects collected while the fiber was PENDING.
       if (this._runner.epoch === oldEpoch) {
-        this.config = this._resolveConfig(this._config)
+        try {
+          this.config = this._resolveConfig(this._config)
+          this._configError = false
+        } catch (reason) {
+          this._configError = true
+          throw reason
+        }
         await this._execute(this._runner)
         this._error = undefined
       }
@@ -734,7 +748,7 @@ export class Fiber {
    * @returns the update waterfall result; the default restart returns a promise.
    * @throws when validation, an update listener, or the restarted plugin fails.
    */
-  update(config: any, noSave = false) {
+  update(config: any, noSave = false): Awaitable<void> {
     const fiber = this.ctx.fiber
     fiber.assertActive()
     fiber._config = config
@@ -742,15 +756,25 @@ export class Fiber {
       // Config resolution may access injected services, so defer it until the
       // fiber can activate.
       fiber._error = undefined
+      fiber._configError = false
       fiber._setEpoch(INACTIVE)
       fiber._refresh()
       return
     }
     config = fiber._resolveConfig(config)
-    return fiber.context.waterfall(fiber, 'internal/update', config, noSave, () => {
+    const result = fiber.context.waterfall(fiber, 'internal/update', config, noSave, () => {
       fiber.config = config
       fiber._error = undefined
+      fiber._configError = false
       return fiber.restart()
     })
+    // a listener may veto the restart, in which case there is nothing to await
+    if (result === undefined) return
+    const task = Promise.resolve(result)
+    // the failure is already reported by the fiber, so mark it handled here:
+    // a caller that drops the result cannot turn it into an unhandled
+    // rejection, while `await update()` still observes it
+    task.catch(() => {})
+    return task
   }
 }

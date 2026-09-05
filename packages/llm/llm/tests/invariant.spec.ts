@@ -19,7 +19,9 @@ async function* source(chunks: readonly StreamChunk[]): AsyncIterable<StreamChun
 }
 
 async function consume(ctx: Context, chunks: readonly StreamChunk[]): Promise<StreamChunk[]> {
-  const stream = ctx.waterfall(ctx as never, 'llm/stream', options, () => source(chunks))
+  // The `never` thisArg opts out of the scope-carrier overload, so the
+  // dispatch result comes back untyped and is restated here.
+  const stream = ctx.waterfall(ctx as never, 'llm/stream', options, () => source(chunks)) as AsyncIterable<StreamChunk>
   const consumed: StreamChunk[] = []
   for await (const chunk of stream) consumed.push(chunk)
   return consumed
@@ -78,7 +80,7 @@ describe('LLM stream invariants', () => {
     const ctx = await setup()
     const stream = ctx.waterfall(ctx as never, 'llm/stream', options, async function* () {
       throw new Error('provider failed')
-    })
+    }) as AsyncIterable<StreamChunk>
     await expect((async () => {
       for await (const _chunk of stream) { /* consume */ }
     })()).rejects.toThrow('provider failed')

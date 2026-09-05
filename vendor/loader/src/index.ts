@@ -1,5 +1,5 @@
 import { Context, FiberState, Inject, Service, type Fiber } from '@deepseek-ai/cordis'
-import { defineProperty, isNullable, type Dict } from '@deepseek-ai/cosmokit'
+import { defineProperty, isNullable, type Awaitable, type Dict } from '@deepseek-ai/cosmokit'
 import { ModuleLoader } from './internal.ts'
 import { Entry, type EntryOptions } from './config/entry.ts'
 import { EntryGroup } from './config/group.ts'
@@ -26,7 +26,7 @@ declare module '@deepseek-ai/cordis' {
     'loader/config-update'(): void
     'loader/entry-init'(entry: Entry): void
     'loader/partial-dispose'(entry: Entry, legacy: Partial<EntryOptions>, active: boolean): void
-    'loader/patch-context'(entry: Entry, next: () => void | Promise<void>): void | Promise<void>
+    'loader/patch-context'(entry: Entry, next: () => Awaitable<void>): Awaitable<void>
   }
 
   interface Context {
