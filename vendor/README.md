@@ -22,6 +22,8 @@ Upstream workspace: `cordis-workspace` (local checkout: `~/repos/cordis-workspac
 | `hmr/` | `@deepseek-ai/cordis-plugin-hmr` | `@cordisjs/plugin-hmr` | 1.0.15 | https://github.com/cordiverse/cordis (`packages/hmr`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 | `logger-console/` | `@deepseek-ai/cordis-plugin-logger-console` | `@cordisjs/plugin-logger-console` | 1.0.0 | https://github.com/cordiverse/cordis (`packages/logger-console`) | `303cfd21e41aa4168d83419efe4196c414cce3d2` |
 
+`pnpm run vendor:status` reads this table and asks each upstream repository which commits since the recorded one touch the vendored package's `src`; `--check` exits non-zero when any row is behind. It also reports a row whose upstream cannot be reached, which is the state `cosmokit/` and `schemastery/` are in: the `deepseek-harness` mirrors they name no longer resolve, and the commits they record are in no reachable repository (`shigma/cosmokit` and `shigma/schemastery` exist but do not contain them). Their provenance is therefore unverifiable until someone re-derives it by comparing the vendored sources against a reachable upstream and repoints the row; the seven Cordis rows above were repointed at `cordiverse/cordis`, where their commits do exist.
+
 Third-party dependencies of the vendored packages stay on npm: `@standard-schema/spec`, `js-yaml`, `chokidar`, `picomatch`, `@babel/code-frame`, `supports-color`, `node-addon-require-builtin`.
 
 Intentionally **not** vendored (verified unused by this set): `reggol`, `@cordisjs/utils`, `@cordisjs/element`, `@cordisjs/unyaml` (dev-time YAML import hook only).
@@ -59,7 +61,7 @@ Keep this log exhaustive — every divergence from upstream must be listed.
 
 To update a vendored package from upstream:
 
-1. In the upstream workspace, note `git rev-parse HEAD` of the relevant submodule.
+1. Run `pnpm run vendor:status` to see which rows are behind and which upstream commits they are missing. In the upstream workspace, note `git rev-parse HEAD` of the relevant submodule.
 2. Copy the package's `src/` (and `bin.js`, `README.md`, `LICENSE` if changed) over the vendored directory.
 3. Re-apply the local modifications listed above (or drop them if upstream made them unnecessary — update the log either way). For a file a modification rewrote, merge rather than copy: `git merge-file <vendored> <upstream-at-the-manifest-SHA> <upstream-head>` reports exactly where an upstream change and a local one overlap, and carries the rest across without asking you to spot it.
 4. Update the version and commit hash in the manifest table. Land the sync in pieces if the re-application is large, and record the commits applied ahead of the column under the manifest until it catches up, so the column never names a snapshot no file is at.
