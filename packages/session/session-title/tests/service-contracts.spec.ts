@@ -325,6 +325,48 @@ describe('SessionTitleService configuration and refresh boundaries', () => {
     await expect(refreshOutcome).resolves.toEqual(expect.objectContaining({ message: 'session-title service disposed' }))
   })
 
+  it('abandons provider work when unload begins, even behind a consumer that is still draining', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(SessionTitleService, CONFIG)
+    const result = deferred<SessionTitleProviderResult>()
+    const requests: SessionTitleProviderRequest[] = []
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('slow-consumer'),
+      automatic: 'all-prompts',
+      generate(request) {
+        requests.push(request)
+        return result.promise
+      },
+    })
+
+    // This service is a provider, so its own disposers run only after every
+    // consumer fiber has finished unloading. Cancellation cannot wait for that.
+    const release = deferred<undefined>()
+    await ctx.inject(['sessionTitle'], (consumerCtx: Context) => {
+      consumerCtx.effect(() => async () => { await release.promise })
+    })
+
+    const session = startSession(ctx, 'slow-consumer-session')
+    appendPrompt(session, 'Provider work')
+    await settle()
+    const refreshOutcome = ctx.sessionTitle.refresh(session).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    await settle()
+    expect(requests).toHaveLength(1)
+
+    const disposal = fiber.dispose()
+    await settle()
+    expect(requests[0]?.signal.aborted).toBe(true)
+
+    release.resolve(undefined)
+    result.resolve({ title: 'Ignored', messageSeqs: [] })
+    await disposal
+    await expect(refreshOutcome).resolves.toEqual(expect.objectContaining({ message: 'session-title service disposed' }))
+  })
+
   it('warns when a detached session prevents queued fallback publication', async () => {
     const ctx = await setup()
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)

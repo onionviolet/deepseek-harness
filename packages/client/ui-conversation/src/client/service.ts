@@ -111,6 +111,9 @@ export class ConversationController extends Service implements IConversation {
     super(ctx, 'conversation')
     this.input = config.input
     this.blocks = config.blocks
+    // A provider's disposers run after its consumers finish unloading, so the
+    // guard that stops handing out image URLs rides the fiber signal instead.
+    ctx.fiber.signal.addEventListener('abort', () => { this.disposed = true }, { once: true })
     ctx.effect(() => () => {
       this.disposed = true
       for (const url of this.createdImageUrls) revokePreview(url)

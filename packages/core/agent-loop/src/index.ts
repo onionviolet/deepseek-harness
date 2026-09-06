@@ -531,17 +531,28 @@ export class AgentLoop extends Service implements AgentFactory {
     })())
     const untrack = this.ownership.track(dispose)
     let unfollowOwner: () => Promise<void> | void
+    // The owner's disposers may run behind its consumers (a provider releases
+    // its services first), so cancellation rides the fiber signal, which aborts
+    // as soon as the owner starts unloading. Tearing the half-built agent down
+    // stays in the effect below; aborting twice is a no-op.
+    const abortForOwnerUnload = (): void => {
+      if (disposing !== undefined) return
+      abort.abort(new Error(`agent "${id}" setup aborted: owner disposed during setup`))
+    }
+    ownerCtx.fiber.signal.addEventListener('abort', abortForOwnerUnload, { once: true })
     try {
       unfollowOwner = ownerCtx.effect(() => () => {
+        ownerCtx.fiber.signal.removeEventListener('abort', abortForOwnerUnload)
         // Owner disposal owns the same quiescence boundary. Its teardown skips
         // unregistering this already-running owner effect from inside itself.
         if (disposing !== undefined) return
-        abort.abort(new Error(`agent "${id}" setup aborted: owner disposed during setup`))
+        abortForOwnerUnload()
         return dispose(true)
       }, `agentLoop.lifecycle(${id})`)
       /* v8 ignore start -- ctx.effect throws only on an inactive fiber, which assertActive() above already rejected */
     } catch (error: unknown) {
       untrack()
+      ownerCtx.fiber.signal.removeEventListener('abort', abortForOwnerUnload)
       callerSignal?.removeEventListener('abort', onCallerAbort)
       this.ownership.signal.removeEventListener('abort', onFactoryTeardown)
       throw error
@@ -681,8 +692,15 @@ export class AgentLoop extends Service implements AgentFactory {
       // owner-fiber unload, and factory teardown so a never-settling backend
       // cannot pin the identity.
       const ownerAbort = new AbortController()
-      const unfollowOwner = ownerCtx.effect(() => () => {
+      // As above: the fiber signal delivers the owner's unload immediately,
+      // ahead of a disposer that a provider owner runs after its consumers.
+      const abortForOwnerUnload = (): void => {
         ownerAbort.abort(new Error(`agent "${id}" setup aborted: owner disposed during setup`))
+      }
+      ownerCtx.fiber.signal.addEventListener('abort', abortForOwnerUnload, { once: true })
+      const unfollowOwner = ownerCtx.effect(() => () => {
+        ownerCtx.fiber.signal.removeEventListener('abort', abortForOwnerUnload)
+        abortForOwnerUnload()
       }, `agentLoop.resume-load(${id})`)
       const fused = AbortSignal.any([
         ...options.signal === undefined ? [] : [options.signal],

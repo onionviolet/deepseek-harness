@@ -23,11 +23,11 @@ provider fiber 会在消费者仍在使用其服务时，就释放这些服务�
 
 消费者追踪取自 `#110`：`Impl` 携带当前注入它的 fiber 集合，由 `_setImpl()` 维护，因为仅靠 `notify()` 看不到已经在卸载中的消费者。
 
-三个 harness 服务把宣告迁到信号上，并把拆卸留在 effect 中：agent loop 的 `FactoryOwnership`（停止接受、中止 teardown 信号、唤醒 `waitWhileActive`）、`dsh-e2b`（`disposed`）与 `dsh-subprocess-e2b`（`disposing` 以及中止在途的 terminal setup）。`docs/defensive-patterns.md` 为下一个服务写下了这条规则。
+每一处曾在 disposer 中宣告释放的 harness 站点都迁到了信号上，并把拆卸留在 effect 中。对 provider 服务——也就是唯一一类 disposer 现在会延后运行的 fiber——的审计找出七处，迁移了六处：agent loop 的 `FactoryOwnership`（停止接受、中止 teardown 信号、唤醒 `waitWhileActive`）及其两处 owner 卸载中止、`dsh-e2b`（`disposed`）、`dsh-subprocess-e2b`（`disposing` 以及中止在途的 terminal setup）、`dsh-plan-mode`（比其 fiber 活得更久的评审）、`dsh-session-title`（先放弃在途标题，再排空），以及客户端 `conversation` 服务（停止继续交出图片 URL）。第七处——client runner 的 timer 包装——保持原样：它的标志局限于单次调度回调，该回调自己的 disposer 会清除定时器，也没有任何东西跨 await 观察它。`docs/defensive-patterns.md` 为下一个服务写下了这条规则。
 
 ## Consequences
 
-- 消费者的清理可以使用它注入的服务：provider 的资源比它活得更久。`packages/boot/app-boot/tests/cordis-fiber.spec.ts` 钉住了这一顺序，也钉住了信号先于第一个 disposer 触发；两者在改造前的源码上都会失败。
+- 消费者的清理可以使用它注入的服务：provider 的资源比它活得更久。在卸载时放弃在途工作的 provider 依然是立即放弃——`packages/session/session-title/tests/service-contracts.spec.ts` 在一个仍在排空的消费者背后钉住了这一点，且在未迁移时会失败。`packages/boot/app-boot/tests/cordis-fiber.spec.ts` 钉住了这一顺序，也钉住了信号先于第一个 disposer 触发；两者在改造前的源码上都会失败。
 - agent-loop 有两处期望发生变化，其测试也随之改变。工厂在 scope 铸造期间卸载时，现在会完全跳过调用方的 `setup` 回调，而不是先运行再回滚——这本就是该测试名称一直宣称的行为。与工厂拆卸竞争的同步 `agentLoop.create()` 现在抛出 `agent loop is not active`，而不是返回一个随即被拆掉的 agent。
 - 取消不再与拆卸顺序耦合，因此未来的顺序调整无法再悄悄延迟它。代价是多了一套需要知晓的机制：一位伸手用 disposer 去翻转标志的服务作者现在是错的，而只有这条被记录的模式会指出这一点。
 - 上游的 `symbols.plugin` 标记没有搬运：这里没有任何东西对子 fiber 的释放排序，该标记不会有读者。

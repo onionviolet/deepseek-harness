@@ -289,14 +289,12 @@ export class SessionTitleService extends Service {
     }
     this.config = deepFreeze({ ...value })
 
+    // Cancellation cannot wait for teardown ordering: a provider's disposers run
+    // after its consumers unload, and a consumer awaiting a title would then be
+    // waiting on work this service has not yet abandoned.
+    ctx.fiber.signal.addEventListener('abort', () => { this.announceDisposal() }, { once: true })
     ctx.effect(() => async () => {
-      this.lifetime.abort(new Error('session-title service disposed'))
-      if (this.registration !== undefined) this.registration.closing = true
-      this.registration = undefined
-      for (const state of this.work.values()) {
-        delete state.pending
-        state.active?.controller.abort(new Error('session-title service disposed'))
-      }
+      this.announceDisposal()
       await this.drain(this.inFlight)
       this.work.clear()
     }, 'sessionTitle lifecycle')
@@ -338,6 +336,17 @@ export class SessionTitleService extends Service {
       state.active?.controller.abort(new Error('session disposed during title generation'))
       this.work.delete(session)
     })
+  }
+
+  /** Stop accepting work and abandon every title still in flight. */
+  private announceDisposal(): void {
+    this.lifetime.abort(new Error('session-title service disposed'))
+    if (this.registration !== undefined) this.registration.closing = true
+    this.registration = undefined
+    for (const state of this.work.values()) {
+      delete state.pending
+      state.active?.controller.abort(new Error('session-title service disposed'))
+    }
   }
 
   /**

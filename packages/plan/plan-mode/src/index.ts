@@ -224,6 +224,9 @@ export class PlanModeController extends Service {
         ? decision
         : { ...decision, messages: [...decision.messages, narration] }
     })
+    // A review outliving this fiber must learn at once: a provider's disposers
+    // run only after its consumers have unloaded, the signal aborts before them.
+    ctx.fiber.signal.addEventListener('abort', () => { disposed = true }, { once: true })
     ctx.effect(() => () => { disposed = true }, 'dsh-plan-mode: close service lifetime')
 
     ctx.systemPrompt.section({
