@@ -36,7 +36,7 @@ effect(execute: () => Effect, label?: string): AsyncDisposable<Promise<void>>
 
 **返回**一个用于撤销该作用的清理函数，并在清理完成后结算。
 
-[源码](../../vendor/cordis/src/fiber.ts#L453)
+[源码](../../vendor/cordis/src/fiber.ts#L475)
 
 ### ctx.fiber
 
@@ -134,6 +134,32 @@ public inertia: Promise<void> | undefined
 
 [源码](../../vendor/cordis/src/fiber.ts#L232)
 
+### fiber.signal
+
+```ts cordis-catalog
+/**
+ * Aborts the moment this fiber starts unloading, before any disposer runs.
+ *
+ * Effect disposers tear resources down, and teardown is ordered — a provider
+ * releases its services and lets consumers finish before it drops what those
+ * consumers were using. Cancellation cannot wait for that ordering: work in
+ * flight has to learn immediately that its owner is going away. Race this
+ * signal instead of inferring cancellation from a disposer that runs.
+ *
+ * A reload installs a fresh signal, so a consumer that captured the previous
+ * one sees it aborted.
+ */
+get signal(): AbortSignal
+```
+
+在该 fiber 开始卸载的瞬间中止，早于任何 disposer 运行。
+
+effect 的 disposer 负责拆卸资源，而拆卸是有序的——provider 会先交出自己的服务、等消费者收尾，然后才丢弃那些消费者仍在使用的东西。取消不能等待这套顺序：在途的工作必须立刻知道它的所有者即将离开。请去竞争这个信号，而不是从某个 disposer 是否运行来推断取消。
+
+一次重载会安装一个新的信号，因此捕获了上一个信号的消费者会看到它已中止。
+
+[源码](../../vendor/cordis/src/fiber.ts#L251)
+
 ### fiber.name
 
 ```ts cordis-catalog
@@ -143,7 +169,7 @@ get name()
 
 插件的显示名称，继承自最近的具名祖先；如果不存在，则为 `'root'`。
 
-[源码](../../vendor/cordis/src/fiber.ts#L373)
+[源码](../../vendor/cordis/src/fiber.ts#L395)
 
 ### fiber.assertActive()
 
@@ -161,7 +187,7 @@ assertActive()
 
 **返回**：fiber 仍处于活动状态时不返回任何内容。
 
-[源码](../../vendor/cordis/src/fiber.ts#L388)
+[源码](../../vendor/cordis/src/fiber.ts#L410)
 
 ### fiber.effect(execute, label?)
 
@@ -192,7 +218,7 @@ effect(execute: () => Effect, label?: string): AsyncDisposable<Promise<void>>
 
 **返回**一个用于撤销该作用的清理函数，并在清理完成后结算。
 
-[源码](../../vendor/cordis/src/fiber.ts#L453)
+[源码](../../vendor/cordis/src/fiber.ts#L475)
 
 ### fiber.getEffects()
 
@@ -209,7 +235,7 @@ getEffects()
 
 **返回**：每个带标签的活动作用对应一棵 `EffectMeta` 树。
 
-[源码](../../vendor/cordis/src/fiber.ts#L606)
+[源码](../../vendor/cordis/src/fiber.ts#L628)
 
 ### fiber.await()
 
@@ -227,7 +253,7 @@ async await()
 
 **返回**：进入稳定状态后的此 fiber。
 
-[源码](../../vendor/cordis/src/fiber.ts#L766)
+[源码](../../vendor/cordis/src/fiber.ts#L817)
 
 ### fiber.restart()
 
@@ -245,7 +271,7 @@ dispose 此插件，并立即使用其当前配置重新加载。
 
 **返回**一个在重新加载完成后兑现的 promise。
 
-[源码](../../vendor/cordis/src/fiber.ts#L780)
+[源码](../../vendor/cordis/src/fiber.ts#L831)
 
 ### fiber.update(config, noSave?)
 
@@ -273,7 +299,7 @@ update(config: any, noSave = false): Awaitable<void>
 
 **返回**更新 waterfall 的结果；默认的重新启动操作返回一个 promise。
 
-[源码](../../vendor/cordis/src/fiber.ts#L799)
+[源码](../../vendor/cordis/src/fiber.ts#L850)
 
 ## Effect
 

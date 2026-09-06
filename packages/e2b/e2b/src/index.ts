@@ -105,6 +105,11 @@ export class E2BRuntime extends Service {
     // failed eager connection observed; getSandbox() still returns the error.
     void this.ready.catch(() => {})
 
+    // Cancellation is prompt while teardown is ordered: the fiber's signal
+    // aborts when unload begins, ahead of the teardown effect below, which a
+    // provider runs only after its consumers have finished.
+    ctx.fiber.signal.addEventListener('abort', () => { this.disposed = true }, { once: true })
+
     ctx.effect(() => async () => {
       this.disposed = true
       let sandbox: Sandbox

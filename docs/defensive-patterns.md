@@ -20,6 +20,10 @@ When an implementation receives several representations of one outcome, normaliz
 
 A teardown that issues kills/aborts but returns before the work stops leaves orphans. Make cleanup async and await the children's exit (kill → await `done`), and close listener/notification registries BEFORE killing so late completions stay silent.
 
+## Announce cancellation, then tear down
+
+`ctx.fiber.signal` aborts when unload begins, before any disposer; a provider's disposers run only after consumers finish. Race the signal, not a disposer-set flag.
+
 ## Contain callback exceptions in the dispatcher
 
 A user-supplied listener that throws must not reject the promise it runs inside or starve the listeners after it. Wrap the dispatch loop in try/catch and log; one bad subscriber never breaks core lifecycle.

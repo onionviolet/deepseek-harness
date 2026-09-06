@@ -465,7 +465,10 @@ describe('agent scope lifecycle', () => {
     })
     await expect(creating).rejects.toThrow(/agent loop is not active/)
     await loopFiber.dispose()
-    expect(setupCalls).toBe(1)
+    // The factory stops accepting work the moment its fiber begins unloading,
+    // which is before the caller's setup would have run: it is skipped, not
+    // run and then rolled back.
+    expect(setupCalls).toBe(0)
     expect(ctx.agents.get(SessionId('factory-scope-race-s'))).toBeUndefined()
     expect(ctx.sessions.get(SessionId('factory-scope-race-s'))).toBeUndefined()
 
@@ -525,7 +528,11 @@ describe('agent scope lifecycle', () => {
       unloading = loopFiber.dispose()
     })
 
-    ctx.agentLoop.create(SessionId('config-scope-race'), { provider: 'mock', model: 'mock' })
+    // The unload announcement lands inside the synchronous create, so the
+    // caller is told the factory is gone instead of receiving an agent that is
+    // torn down a moment later.
+    expect(() => ctx.agentLoop.create(SessionId('config-scope-race'), { provider: 'mock', model: 'mock' }))
+      .toThrow('agent loop is not active')
     await unloading
     expect(ctx.agents.get(SessionId('config-scope-race')) === undefined).toBe(true)
     expect(ctx.sessions.list().length).toBe(sessionsBefore)

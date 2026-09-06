@@ -44,7 +44,13 @@ class FactoryOwnership {
   private readonly liveAgents = new Set<() => Promise<void>>()
   private startupTasks = new Set<Promise<void>>()
 
-  constructor(private readonly fiber: Context['fiber']) {}
+  constructor(private readonly fiber: Context['fiber']) {
+    // Cancellation is prompt while teardown is ordered: the fiber's signal
+    // aborts when unload begins, ahead of the teardown effect, so work in
+    // flight stops being accepted at once even though this fiber's own
+    // disposers run after its consumers have finished.
+    fiber.signal.addEventListener('abort', () => { this.announce() }, { once: true })
+  }
 
   /** Aborts (reason: `agent loop is not active` error) when factory teardown begins. */
   get signal(): AbortSignal {
@@ -78,10 +84,15 @@ class FactoryOwnership {
     await Promise.race([job, this.inactive.promise])
   }
 
-  async dispose(): Promise<void> {
+  /** Stop accepting work and wake everything racing factory teardown. */
+  private announce(): void {
     this.accepting = false
     this.teardown.abort(new Error('agent loop is not active'))
     this.inactive.resolve()
+  }
+
+  async dispose(): Promise<void> {
+    this.announce()
     await Promise.all([
       ...[...this.liveAgents].map(dispose => dispose()),
       ...this.startupTasks,

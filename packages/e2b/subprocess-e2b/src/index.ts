@@ -62,6 +62,15 @@ export class E2BSubprocessRuntime extends SubprocessRuntime {
   private readonly pollMs: number
   private disposing = false
 
+  /** Stop accepting work and abort every terminal setup still in flight. */
+  private announceDisposal(): void {
+    if (this.disposing) return
+    this.disposing = true
+    for (const setup of this.terminalSetups) {
+      setup.controller.abort(new Error('subprocess-e2b: service disposed during terminal setup'))
+    }
+  }
+
   /** Create the E2B subprocess service and bind its disposal policy. */
   constructor(ctx: Context, config: Config) {
     super(ctx)
@@ -71,11 +80,14 @@ export class E2BSubprocessRuntime extends SubprocessRuntime {
       throw new Error('subprocess-e2b: pollMs must be a positive safe integer')
     }
     this.pollMs = pollMs
+    // Cancellation is prompt while teardown is ordered: the fiber's signal
+    // aborts when unload begins, ahead of the teardown effect below, which a
+    // provider runs only after its consumers have finished. Terminal setups in
+    // flight learn immediately; terminating what is already running is teardown.
+    ctx.fiber.signal.addEventListener('abort', () => { this.announceDisposal() }, { once: true })
+
     ctx.effect(() => async () => {
-      this.disposing = true
-      for (const setup of this.terminalSetups) {
-        setup.controller.abort(new Error('subprocess-e2b: service disposed during terminal setup'))
-      }
+      this.announceDisposal()
       await Promise.all([...this.terminalSetups].map(setup => setup.done))
       const handles = [...this.live]
       const terminals = [...this.terminals]

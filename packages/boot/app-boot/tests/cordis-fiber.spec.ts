@@ -100,6 +100,58 @@ describe('vendored cordis generations', () => {
   })
 })
 
+describe('vendored cordis unload ordering', () => {
+  it('keeps a provider\'s resources alive until its consumers have unloaded', async () => {
+    const root = new Context()
+    const events: string[] = []
+    let released = false
+
+    const provider = root.plugin((ctx: Context) => {
+      ctx.provide('probeResource', { use: () => events.push(released ? 'use-after-release' : 'use-ok') })
+      ctx.effect(() => () => { released = true; events.push('resource-released') })
+    })
+    await provider
+
+    const consumer = root.inject(['probeResource'], (ctx: Context) => {
+      ctx.effect(() => async () => {
+        events.push('consumer-cleanup-start')
+        await new Promise(resolve => setTimeout(resolve, 30))
+        ;(ctx as Context & { probeResource: { use: () => void } }).probeResource.use()
+        events.push('consumer-cleanup-end')
+      })
+    })
+    await consumer
+
+    await provider.dispose()
+
+    // The provider relinquishes the service and waits for the consumer's own
+    // teardown before dropping what that teardown was still using.
+    expect(events).toEqual(['consumer-cleanup-start', 'use-ok', 'consumer-cleanup-end', 'resource-released'])
+  })
+
+  it('aborts the fiber signal before any disposer runs', async () => {
+    const root = new Context()
+    const order: string[] = []
+    let seenAtSignal: string[] | undefined
+
+    const fiber = root.plugin((ctx: Context) => {
+      ctx.fiber.signal.addEventListener('abort', () => {
+        seenAtSignal = [...order]
+        order.push('signal')
+      }, { once: true })
+      ctx.effect(() => () => { order.push('disposer') })
+    })
+    await fiber
+
+    await fiber.dispose()
+
+    // Cancellation cannot wait for teardown ordering: work in flight learns
+    // its owner is going away before the first disposer runs.
+    expect(seenAtSignal).toEqual([])
+    expect(order).toEqual(['signal', 'disposer'])
+  })
+})
+
 describe('vendored cordis dispatch', () => {
   it('applies listeners with the dispatch this-argument', () => {
     const root = new Context()

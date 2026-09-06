@@ -231,12 +231,31 @@ export class Fiber {
   /** The in-flight load/unload transition, if one is currently running. */
   public inertia: Promise<void> | undefined
 
+  /** Whether this fiber is releasing its own services and awaiting consumers. */
+  public _releasing = false
   public readonly _hooks: Dict<DisposableList<Function>> = Object.create(null)
   public readonly _disposables = new DisposableList<Disposable>()
+
+  /**
+   * Aborts the moment this fiber starts unloading, before any disposer runs.
+   *
+   * Effect disposers tear resources down, and teardown is ordered — a provider
+   * releases its services and lets consumers finish before it drops what those
+   * consumers were using. Cancellation cannot wait for that ordering: work in
+   * flight has to learn immediately that its owner is going away. Race this
+   * signal instead of inferring cancellation from a disposer that runs.
+   *
+   * A reload installs a fresh signal, so a consumer that captured the previous
+   * one sees it aborted.
+   */
+  get signal(): AbortSignal {
+    return this._abort.signal
+  }
 
   // Same as `this.ctx`, but with a more specific type.
   protected context: Context
 
+  private _abort = new AbortController()
   private _error: any
   // Whether _error came from resolving config against injected services
   // rather than from the plugin body; see _setEpoch().
@@ -329,6 +348,9 @@ export class Fiber {
           // rejection propagate; process-level crash is the honest outcome.
           while (this.inertia) {
             await this.inertia
+          }
+          for (const name of Object.keys(this._store)) {
+            this._setImpl(name)
           }
         }
       }, 'ctx.plugin()')
@@ -632,18 +654,30 @@ export class Fiber {
     }
   }
 
+  private _setImpl(name: string, impl?: Impl) {
+    const oldImpl = this._store[name]
+    if (oldImpl === impl) return
+    oldImpl?.consumers.delete(this)
+    if (impl) {
+      this._store[name] = impl
+      impl.consumers.add(this)
+    } else {
+      delete this._store[name]
+    }
+  }
+
   _checkImpl(name: string) {
     const impl = this.ctx.reflect._getImpl(name, true)
-    if (!impl) return delete this._store[name]
+    if (!impl) return this._setImpl(name)
     try {
       if (impl.check && !impl.check.call(getTraceable(this.ctx, impl.value))) {
-        return delete this._store[name]
+        return this._setImpl(name)
       }
     } catch (error) {
       impl.fiber.ctx.logger.error(error)
-      return delete this._store[name]
+      return this._setImpl(name)
     }
-    this._store[name] = impl
+    this._setImpl(name, impl)
   }
 
   _refresh() {
@@ -688,6 +722,9 @@ export class Fiber {
   }
 
   private async _reload() {
+    // A new attempt owns a fresh cancellation signal; the previous one stays
+    // aborted for anything that captured it.
+    if (this._abort.signal.aborted) this._abort = new AbortController()
     this.store = { ...this._store }
     const oldEpoch = this._runner.epoch
     const oldGeneration = this._runner.generation
@@ -735,7 +772,10 @@ export class Fiber {
   }
 
   private async _unload() {
-    await Promise.all(this._disposables.clear().map(async (dispose) => {
+    // Announce before anything is torn down: work in flight races this signal,
+    // so cancellation does not wait behind the teardown ordering below.
+    this._abort.abort(new CordisError('INACTIVE_EFFECT'))
+    const run = async (dispose: Disposable) => {
       try {
         await composeError(async (info) => {
           await Promise.resolve()
@@ -745,7 +785,18 @@ export class Fiber {
       } catch (reason) {
         this.ctx.logger.error(reason)
       }
-    }))
+    }
+    // A provider relinquishes its services, and lets consumers finish, before
+    // tearing down the resources those consumers were still using. Everything
+    // else drains concurrently, exactly as before.
+    const disposables = this._disposables.clear()
+    const provides = disposables.filter(dispose => dispose[symbols.provide])
+    if (provides.length) {
+      this._releasing = true
+      await Promise.all(provides.map(run))
+      this._releasing = false
+    }
+    await Promise.all(disposables.filter(dispose => !dispose[symbols.provide]).map(run))
     this.store = undefined
     this._updateState(() => {
       if (this._runner.epoch === INACTIVE) {

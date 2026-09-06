@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-unload-ordering-and-cancellation.md
+2026-09-05-unload-ordering-and-cancellation.md: f010a2ea9e1514bdc4cb4979257d0cc55ec0bea4
+2026-09-05-unload-ordering-and-cancellation.zh.md: 9a71818f0f46a115d348a8afa0b61bbd3ed06fab
