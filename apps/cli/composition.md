@@ -46,6 +46,8 @@ flowchart LR
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@deepseek-ai/dsh-jobs-local"]
   cfg --> plugin_dsh_base_jobs
+  plugin_dsh_base_llm_sampling["llm-sampling<br/>@deepseek-ai/dsh-llm-sampling"]
+  cfg --> plugin_dsh_base_llm_sampling
   plugin_dsh_base_llm_retry["llm-retry<br/>@deepseek-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_config_editor["config-editor<br/>@deepseek-ai/dsh-config-editor"]
@@ -225,6 +227,7 @@ flowchart LR
 | `plugin-package-inventory-deepseek` | `@deepseek-ai/dsh-plugin-package-inventory-deepseek` |
 | `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` |
 | `jobs` | `@deepseek-ai/dsh-jobs-local` |
+| `llm-sampling` | `@deepseek-ai/dsh-llm-sampling` |
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |
 | `config-editor` | `@deepseek-ai/dsh-config-editor` |
 | `settings` | `@deepseek-ai/dsh-settings` |

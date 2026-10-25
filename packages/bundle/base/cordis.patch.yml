@@ -96,6 +96,11 @@
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
 
+    # Optional fork sampling override; enable in a profile patch.
+    - id: llm-sampling
+      name: '@deepseek-ai/dsh-llm-sampling'
+      disabled: true
+
     - id: llm-retry
       name: '@deepseek-ai/dsh-llm-retry'
 

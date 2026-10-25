@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for local-setup.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/local-setup.md
+/local-ollama-setup:
+  en: 1cf37eeedc53d185
+  zh: 08f514fd81685788
+/local-ollama-setup/build-and-run:
+  en: 085b3f16946c597c
+  zh: 6242cf4c94259221
+/local-ollama-setup/configure-ollama:
+  en: faeb402918d7d23a
+  zh: ea2d5da2de147419
+/local-ollama-setup/optional-temperature-control:
+  en: 92b8b8a59d97e31c
+  zh: fa5fd25da7ae3eeb
+/local-ollama-setup/verify:
+  en: 4f980a5b44e5b9f2
+  zh: 0284a2e60114d8c5
