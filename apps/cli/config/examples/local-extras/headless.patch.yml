@@ -1,0 +1,11 @@
+# Opt-in additions for local routes: the create_worktree tool and Claude Code hooks.
+# Stack after a local-coding or local-work overlay; each adds model-visible tool text.
+- insert:
+    - id: worktree
+      name: '@deepseek-ai/dsh-experimental-worktree'
+    - id: tool-worktree
+      name: '@deepseek-ai/dsh-experimental-tool-worktree'
+    - id: hooks-claude-code
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: !!js process.env.HOME + "/.claude/settings.json"

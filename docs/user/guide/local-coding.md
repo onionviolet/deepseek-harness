@@ -25,6 +25,8 @@ dsh web --no-open --patch "$harness_checkout/apps/cli/config/examples/local-codi
 
 The [headless overlay](../../../apps/cli/config/examples/local-coding/headless.patch.yml) removes image reading, delegation, workflows, goals, web access, plugin management, skills, todo and plan tools. It retains text reads, writes, literal edits, glob, grep, shell, job controls and working-directory selection. The [Web overlay](../../../apps/cli/config/examples/local-coding/web.patch.yml) adds a custom `local-coding` preset with those capabilities plus user questions. Select Local coding in General settings for subsequently created sessions; existing sessions retain their preset revision. The overlay does not change the default selection.
 
+For models that need worktrees or your existing Claude Code hooks, stack the optional [extras overlay](../../../apps/cli/config/examples/local-extras/headless.patch.yml) after a local coding overlay with a second `--patch`. It mounts `create_worktree` and runs the command hooks in `~/.claude/settings.json`, so edit `configPath` to use a different hooks file. Both add model-visible tool text to a small context window, and the hooks run with the permissions of your shell.
+
 These are task compositions, not security policies. Shell commands retain their normal capabilities under the selected permission mode. Use the permission picker or headless `--permission-mode` when confinement must change. The overlays neither grant Full access nor enable model-based Auto review.
 
 <a id="configure-compaction"></a>

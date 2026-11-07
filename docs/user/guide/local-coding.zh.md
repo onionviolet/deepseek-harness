@@ -25,6 +25,8 @@ dsh web --no-open --patch "$harness_checkout/apps/cli/config/examples/local-codi
 
 [headless 覆盖层](../../../apps/cli/config/examples/local-coding/headless.patch.yml)移除图像读取、委派、工作流、目标、网页访问、插件管理、技能、待办和计划工具。它保留文本读取、写入、字面编辑、glob、grep、shell、作业控制及工作目录选择。[Web 覆盖层](../../../apps/cli/config/examples/local-coding/web.patch.yml)新增自定义 `local-coding` 预设，提供上述能力及用户提问。在常规设置中选择 Local coding，影响随后新建的会话；已有会话保留其预设修订。覆盖层不改变默认选择。
 
+需要工作树或沿用现有 Claude Code 钩子时，在本地编码覆盖层之后再用一个 `--patch` 叠加可选的[附加覆盖层](../../../apps/cli/config/examples/local-extras/headless.patch.yml)。它挂载 `create_worktree`，并运行 `~/.claude/settings.json` 中的命令钩子；要使用其他钩子文件，请修改 `configPath`。两者都会向较小的上下文窗口增加模型可见的工具文本，且钩子以你的 shell 权限运行。
+
 这些是任务组合，不是安全策略。Shell 命令在所选权限模式下保留正常能力。需要改变隔离时，使用权限选择器或 headless 的 `--permission-mode`。覆盖层不授予 Full access，也不启用基于模型的 Auto review。
 
 <a id="configure-compaction"></a>
