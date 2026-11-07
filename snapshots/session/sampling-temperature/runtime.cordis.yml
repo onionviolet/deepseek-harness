@@ -1,0 +1,4 @@
+- id: llm-sampling
+  disabled: false
+  config:
+    temperature: 0.75

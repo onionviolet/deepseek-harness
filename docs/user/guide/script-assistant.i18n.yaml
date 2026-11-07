@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for script-assistant.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/script-assistant.md
+/local-assistant-for-scripts:
+  en: df3690d16df844a1
+  zh: 4f7e66fe18dfe158
+/local-assistant-for-scripts/summary:
+  en: 141b1f10368ea330
+  zh: ced96ed3fa1617a2
+/local-assistant-for-scripts/table-of-contents:
+  en: 803d1c3ca4d3aedb
+  zh: 4ab31c4249dcace6
+/local-assistant-for-scripts/start-the-service:
+  en: 81c8e723258119c0
+  zh: 769a3c43b920cc5f
+/local-assistant-for-scripts/choose-a-path:
+  en: 26cc421715fa4b0e
+  zh: d6717237f68ba856
+/local-assistant-for-scripts/send-a-request:
+  en: 7c40b91110df7814
+  zh: 292dfb4ffea132a0
+/local-assistant-for-scripts/check-the-boundaries:
+  en: 025128a49132d4af
+  zh: 71f4625d27ce3214
+/local-assistant-for-scripts/dev-note:
+  en: 840395dee54e7138
+  zh: 7eb6cd67c118b372

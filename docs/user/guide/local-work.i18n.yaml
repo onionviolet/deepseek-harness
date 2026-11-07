@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for local-work.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/local-work.md
+/local-scripts-and-file-work:
+  en: ad028bc369dccfe8
+  zh: 1b2f4b42f575ef4c
+/local-scripts-and-file-work/summary:
+  en: bbab0397adfd0305
+  zh: 5bc545940f92c1f8
+/local-scripts-and-file-work/table-of-contents:
+  en: 784cf4aebb383315
+  zh: d638878a7115b64e
+/local-scripts-and-file-work/run-a-task:
+  en: e164b6b33b1c4620
+  zh: 4df26ede650be776
+/local-scripts-and-file-work/use-the-web-preset:
+  en: c42e0d3ba24e5153
+  zh: 67a91d259fc39d14
+/local-scripts-and-file-work/load-script-instructions:
+  en: 5f6a4ca4f4bb0dc6
+  zh: f7836ae8b34d9088
+/local-scripts-and-file-work/check-results:
+  en: 4de93c90d774a7ea
+  zh: 5987f70b401f6f62
+/local-scripts-and-file-work/dev-note:
+  en: 96ce8b63c40ee615
+  zh: 1b1a2325e8d4dd8f

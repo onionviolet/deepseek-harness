@@ -247,6 +247,97 @@ beforeAll(async () => {
   ctx = await bootWeb(await mkdtemp(join(tmpdir(), 'dsh-web-presets-')))
 }, 120_000)
 
+describe('the optional local coding composition', () => {
+  it('keeps file and shell tools and compacts a 32K route before continuing', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-local-coding-'))
+    onTestFinished(async () => { await rm(home, { recursive: true, force: true }) })
+    const local = await bootWeb(home, loadOverlayPatches('local-coding',
+      fileURLToPath(new URL('../config/examples/local-coding/web.patch.yml', import.meta.url))))
+    class LocalAdapter extends MinimalCompactionAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 32_768 } })
+      }
+    }
+    const adapter = new LocalAdapter()
+    const unregister = local.llm.registerAdapter(['ollama-local'], adapter)
+    let handle: Awaited<ReturnType<Context['agents']['create']>> | undefined
+    try {
+      handle = await local.agents.create({
+        sessionId: SessionId('local-coding-compaction'),
+        agentOptions: { provider: 'ollama-local', model: 'qwen3.8:27b', maxTokens: 4096 },
+        setup: owner => local.agentPresets.mount(owner, 'local-coding').then(() => undefined),
+      })
+      expect(toolNames(local, handle.agent)).toEqual([
+        'ask_user_question', process.platform === 'win32' ? 'pwsh' : 'bash',
+        'edit', 'glob', 'grep', 'job_kill', 'job_list', 'job_output',
+        'read', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update',
+        'working_directory', 'write',
+      ].sort())
+      handle.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'Remember the project requirements. '.repeat(200) }],
+        source: { kind: 'user' },
+      }))
+      await handle.agent.whenIdle()
+      const before = handle.agent.session.surface.replaceGeneration
+      const execution = await local.commands.execute(handle.agent, '/compact', [], new AbortController().signal)
+      expect(execution?.result.kind).toBe('success')
+      expect(handle.agent.session.surface.replaceGeneration).toBeGreaterThan(before)
+      expect(adapter.requests.filter(request => request.purpose === 'compaction'))
+        .toEqual([expect.objectContaining({ maxTokens: 4096 })])
+      handle.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'Continue the project task.' }], source: { kind: 'user' },
+      }))
+      await handle.agent.whenIdle()
+      expect(adapter.requests.at(-1)?.messages.flatMap(message => message.content)
+        .some(block => block.type === 'text' && block.text.includes('Preserve the requested project task.'))).toBe(true)
+    } finally {
+      await handle?.dispose()
+      unregister()
+      await local.fiber.dispose()
+    }
+  })
+})
+
+describe('the optional local work composition', () => {
+  it('loads script instructions and exposes file delivery without delegation', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-local-work-'))
+    onTestFinished(async () => { await rm(home, { recursive: true, force: true }) })
+    const patches = loadOverlayPatches('local-work',
+      fileURLToPath(new URL('../config/examples/local-work/web.patch.yml', import.meta.url)))
+    const declaration = patches[0]?.insert?.[0]
+    if (declaration === undefined) throw new Error('local-work overlay must declare a preset')
+    const definition = declaration.config as { plugins: PatchOptions[] }
+    const provider = definition.plugins.find(row => row.id === 'skill-filesystem')
+    if (provider === undefined) throw new Error('local-work requires filesystem skills')
+    provider.config = { includeDefaultRoots: false, watch: false,
+      customSkillDirs: [fileURLToPath(new URL('../config/examples/local-work/skills', import.meta.url))] }
+    const local = await bootWeb(home, patches)
+    let handle: Awaited<ReturnType<Context['agents']['create']>> | undefined
+    try {
+      handle = await local.agents.create({
+        sessionId: SessionId('local-work-skills'),
+        setup: owner => local.agentPresets.mount(owner, 'local-work').then(() => undefined),
+      })
+      const names = toolNames(local, handle.agent)
+      expect(names).toEqual([
+        'ask_user_question', process.platform === 'win32' ? 'pwsh' : 'bash',
+        'edit', 'glob', 'grep', 'job_kill', 'job_list', 'job_output',
+        'present', 'read', 'skill', 'team_task_create', 'team_task_get', 'team_task_list',
+        'team_task_update', 'todo_write', 'working_directory', 'write',
+      ].sort())
+      const loaded = await executeToolFixture(local, {
+        callId: ToolCallId('local-work-load-skill'), name: 'skill',
+        arguments: { name: 'local-scripts' }, signal: new AbortController().signal, agent: handle.agent,
+      })
+      expect(loaded.isError).toBe(false)
+      expect(JSON.stringify(loaded.content)).toContain('check actual headers, counts, totals')
+    } finally {
+      await handle?.dispose()
+      await local.fiber.dispose()
+    }
+  })
+})
+
 describe('the shipped Web composition', () => {
   it('registers the directory and conditional Team tools in the global layer', () => {
     // Team registrations are shared; session mode controls their step-time availability.

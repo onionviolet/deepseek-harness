@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-sampling/README.md
+/:
+  en: 3a0a6493a1ec4392
+  zh: 4366e75dbed79ff6
+/deepseek-ai-dsh-client-ui-sampling:
+  en: 40af9ae1c7933f40
+  zh: b6ee21bdb08dc78c
+/deepseek-ai-dsh-client-ui-sampling/summary:
+  en: 4b5284fec9ecdf5a
+  zh: 0eaeca30e487aafe
+/deepseek-ai-dsh-client-ui-sampling/table-of-contents:
+  en: cc82388c0008148c
+  zh: b3c2adb1ea6301a6
+/deepseek-ai-dsh-client-ui-sampling/use-this-package:
+  en: 692a3fa8a969467f
+  zh: 64407b1b3e6946a0
+/deepseek-ai-dsh-client-ui-sampling/dev-note:
+  en: bf5dcbbb7fde9a73
+  zh: 37e59d89424a9572
+/deepseek-ai-dsh-client-ui-sampling/model-experience:
+  en: 215e7ba838619b7b
+  zh: 8b445b5965615aae
+/deepseek-ai-dsh-client-ui-sampling/model-experience/request-temperature:
+  en: 07f13b4f9b2c3e39
+  zh: 5fc6c90d4a162def
+/deepseek-ai-dsh-client-ui-sampling/model-experience/request-temperature/what-the-model-sees:
+  en: 6faa6ac85929ac63
+  zh: 59f34d91a9d9b43c
+/deepseek-ai-dsh-client-ui-sampling/model-experience/request-temperature/token-effect:
+  en: 22c98b53d8d8844a
+  zh: 2e253b7465adf1d2
+/deepseek-ai-dsh-client-ui-sampling/model-experience/request-temperature/kv-cache-effect:
+  en: bba61cf7f2333665
+  zh: 9641fe5e88491ec0
+/deepseek-ai-dsh-client-ui-sampling/known-limitations-and-deferred-work:
+  en: 3e6d379b5a483548
+  zh: 0bae354a90ec5551

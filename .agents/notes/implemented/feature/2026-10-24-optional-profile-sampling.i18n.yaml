@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-24-optional-profile-sampling.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-24-optional-profile-sampling.md
+/agent-note-optional-profile-sampling-control:
+  en: a783843a103739d4
+  zh: 9460c32b3ef336ab
+/agent-note-optional-profile-sampling-control/problem:
+  en: 562c5bd482fcab97
+  zh: 6d2913f650814c99
+/agent-note-optional-profile-sampling-control/decision:
+  en: adc07dd81d574da4
+  zh: b78c59abbb9378c4
+/agent-note-optional-profile-sampling-control/alternatives-considered:
+  en: 8650750e32933464
+  zh: 730703a78205a7e9
+/agent-note-optional-profile-sampling-control/consequences:
+  en: fb744861500e48c8
+  zh: 011399e27c3df3a4

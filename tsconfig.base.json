@@ -33,6 +33,8 @@
       "@deepseek-ai/dsh-client-ui-file-actions/types": ["./packages/client/ui-file-actions/src/types.ts"],
       "@deepseek-ai/dsh-client-ui-context-menu": ["./packages/client/ui-context-menu/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-context-menu/client": ["./packages/client/ui-context-menu/src/client/index.ts"],
+      "@deepseek-ai/dsh-llm-sampling": ["./packages/llm/llm-sampling/src"],
+      "@deepseek-ai/dsh-client-ui-sampling": ["./packages/client/ui-sampling/src"],
       "@deepseek-ai/dsh-client-ui-entry-customization": ["./packages/client/ui-entry-customization/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-entry-customization/client": ["./packages/client/ui-entry-customization/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-entry-customization/src/*": ["./packages/client/ui-entry-customization/src/*"],

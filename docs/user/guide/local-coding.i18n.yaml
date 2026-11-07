@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for local-coding.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/local-coding.md
+/local-coding-with-a-smaller-tool-catalog:
+  en: b5a3fef4a76d7bb1
+  zh: 320661ef42d9875e
+/local-coding-with-a-smaller-tool-catalog/summary:
+  en: 1d3c85e0052c0cdb
+  zh: 4c98df552601bf8a
+/local-coding-with-a-smaller-tool-catalog/table-of-contents:
+  en: d8ae8fadaa057bbe
+  zh: 914cc8e2866656c0
+/local-coding-with-a-smaller-tool-catalog/choose-an-overlay:
+  en: 7cf7c4ccaac385b5
+  zh: 261e897454b7cdac
+/local-coding-with-a-smaller-tool-catalog/configure-compaction:
+  en: 49e44847c241ff04
+  zh: 1bf7b15777e71b99
+/local-coding-with-a-smaller-tool-catalog/continue-and-recover:
+  en: d1347bf49eafa683
+  zh: 6ef1479b6a4ea63a
+/local-coding-with-a-smaller-tool-catalog/verification:
+  en: f6c3bdfc46e7f080
+  zh: a0feb69f2ff01f24
+/local-coding-with-a-smaller-tool-catalog/dev-note:
+  en: 88f65c1ab5970921
+  zh: 7d9d6d1a3701e5c1
