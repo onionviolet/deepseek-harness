@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for local-harness-audit.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/local-harness-audit.md
+/local-coding-harness-audit:
+  en: 628ef1a1003f9353
+  zh: 8f28fd1f3626fb80
+/local-coding-harness-audit/summary:
+  en: 751b9c059f4259fa
+  zh: b1a2be2e811e36af
+/local-coding-harness-audit/table-of-contents:
+  en: a6006df3267a3350
+  zh: f85021114fe840a2
+/local-coding-harness-audit/incumbent-capabilities:
+  en: 09f304387f3b9c7d
+  zh: 70144d48d602f933
+/local-coding-harness-audit/alternatives-and-mechanisms:
+  en: bdac9f68cd65c66b
+  zh: 121a215b70525047
+/local-coding-harness-audit/community-modules:
+  en: c8d6b290dce4f743
+  zh: 7b0e8b9cf7245316
+/local-coding-harness-audit/acceptance-evidence:
+  en: b4a51cd29750eb5f
+  zh: ab5dc1e4b3d38bde
+/local-coding-harness-audit/remaining-tradeoffs:
+  en: d48166728a69a2ce
+  zh: a366183d5cc24911
+/local-coding-harness-audit/dev-note:
+  en: 95afef8e97753b8f
+  zh: 5971e0a5042915bf

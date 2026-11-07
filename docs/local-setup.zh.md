@@ -14,6 +14,13 @@
 
 在 `llm-pi-ai` 条目中声明自定义 `openai-completions` 路由，设置基础地址 `http://127.0.0.1:11434/v1`、明确的模型 id 和容量，并在需要时使用本地占位 Authorization 请求头。将 `agent-default-model` 指向该路由和模型。当前配置格式见[提供方指南](user/guide/providers.zh.md)。请验证端点的推理和图像能力，不要仅凭模型名称推断。
 
+<a id="local-coding-and-context-budgets"></a>
+## 本地编码与上下文预算
+
+脚本和带技能的文件处理可使用 [Local work](user/guide/local-work.zh.md)，狭窄的文本编辑可使用更小的编码模式。
+
+[本地编码指南](user/guide/local-coding.zh.md)介绍可选的小工具目录、精确路由的小窗口压缩策略和持久 headless 继续方式。[审计](local-harness-audit.zh.md)区分本地测量结果与仅检查源码的替代方案。
+
 <a id="optional-temperature-control"></a>
 ## 可选温度控件
 

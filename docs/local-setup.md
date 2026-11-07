@@ -12,6 +12,13 @@ For a one-shot task, run `pnpm dsh --profile headless "your task"`. Profile patc
 
 Declare a custom `openai-completions` route in the `llm-pi-ai` entry with base URL `http://127.0.0.1:11434/v1`, explicit model id and capacities, and a local placeholder Authorization header if required. Set `agent-default-model` to that route and model. Use the [provider guide](user/guide/providers.md) for the current configuration format. Confirm the endpoint's reasoning and image capabilities rather than inferring them from its model name.
 
+<a id="local-coding-and-context-budgets"></a>
+## Local coding and context budgets
+
+Use [Local work](user/guide/local-work.md) for scripts and file processing with skills, and the smaller coding mode for narrow text edits.
+
+Use the [local coding guide](user/guide/local-coding.md) for the optional smaller tool catalog, exact-route small-window compaction policy, and durable headless continuation. The [audit](local-harness-audit.md) separates measured local results from source-inspected alternatives.
+
 ## Optional temperature control
 
 Add the following rows to the Web profile patch. The Host row also works in headless; the UI row belongs only in Web. Both plugins remain disabled in standard bundles.

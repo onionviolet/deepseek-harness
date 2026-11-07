@@ -1,0 +1,8 @@
+version: 1
+scenario: local-coding-tools
+profile: headless
+composition: default
+recording: authored
+header:
+  class: local-coding-tools
+  pin: true
