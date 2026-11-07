@@ -39,7 +39,7 @@ Headless uses the Host `compaction-basic` row. Web presets own separate scoped i
 <a id="continue-and-recover"></a>
 ## Continue and recover
 
-Headless prints its session id with `--json`. Supply that id with `--session-id` on a later invocation using the same overlay and workspace. Resume keeps conversation history; file observations must be renewed in the new process before editing an existing file.
+Headless prints its session id with `--json`. Supply that id with `--session-id` on a later invocation using the same overlay and workspace. Resume keeps conversation history. The `fs-observation-policy` row ships disabled, so `write` and `edit` need no prior read unless a profile patch enables it; with it enabled, file observations must be renewed in the new process before editing an existing file.
 
 After a rejected edit, read the current file and reconsider the replacement. After an interrupted command, inspect its actual effects before retrying. Session persistence records conversation and tool outcomes; it does not restore workspace files. Use a disposable checkout or an explicit Git checkpoint when file rollback is needed.
 

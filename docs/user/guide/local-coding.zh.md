@@ -39,7 +39,7 @@ Headless 使用 Host 的 `compaction-basic` 行。Web 预设各自拥有独立�
 <a id="continue-and-recover"></a>
 ## 继续与恢复
 
-Headless 在使用 `--json` 时输出会话 id。随后调用可使用相同覆盖层及工作区，通过 `--session-id` 提供该 id。恢复保留对话历史；新进程编辑已有文件前，必须重新读取以建立文件观察记录。
+Headless 在使用 `--json` 时输出会话 id。随后调用可使用相同覆盖层及工作区，通过 `--session-id` 提供该 id。恢复保留对话历史。`fs-observation-policy` 行默认禁用，因此除非 profile patch 启用它，`write` 和 `edit` 无需事先读取；启用后，新进程编辑已有文件前必须重新读取以建立文件观察记录。
 
 编辑被拒绝后，读取当前文件并重新考虑替换。命令被中断后，重试前先检查实际影响。会话持久化记录对话及工具结果；它不会恢复工作区文件。需要文件回滚时，使用临时检出或明确的 Git 检查点。
 

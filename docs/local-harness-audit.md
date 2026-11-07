@@ -27,7 +27,7 @@ The source inventory contains 365 workspace packages, including 22 bundle manife
 
 | Capability | Available and selected composition | Evidence or limit |
 |---|---|---|
-| File tools and observation policy | Base and Standard; direct text tools absent from Minimal | Live reads and one-line literal edit succeeded; editing after process resume required rereading |
+| File tools and observation policy | Base and Standard; direct text tools absent from Minimal | Live reads and one-line literal edit succeeded; editing after process resume required rereading on 0.2.1-rc.3, and 0.2.2 ships the policy disabled |
 | Shell and jobs | Base/Standard shell and job controls; Minimal has its own persistent shell | Live bash and tests succeeded; experimental global persistent-terminal bundle remains unselected |
 | Durability and resume | JSONL persistence and checkpoint policy in base | Same session resumed in separate headless processes; conversation persistence does not undo files |
 | Context management | Token meter, compaction and output pruner; scoped per Web preset | Default reserve fails the 32K configuration calculation; local route policy repairs it |
@@ -95,4 +95,4 @@ R3. No evidence here justifies porting historical framework patches wholesale, i
 
 ## Dev Note
 
-The repository examples are optional source configuration, not new default bundles. The owning guide gives their setup and recovery behavior; the tests and recorded scenario own repeatable acceptance. Remote CI, cross-platform runtime trials and human acceptance are not claimed.
+The repository examples are optional source configuration, not new default bundles. The owning guide gives their setup and recovery behavior; the tests and recorded scenario own repeatable acceptance. The live trials ran on 0.2.1-rc.3. The compositions were rebuilt on 0.2.2-rc.1, where the deterministic checks pass and live Ollama trials have not been repeated. The Web catalogs now include the four `team_task_*` tools that the base bundle mounts. Remote CI, cross-platform runtime trials and human acceptance are not claimed.
