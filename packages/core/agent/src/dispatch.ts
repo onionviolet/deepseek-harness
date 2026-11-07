@@ -10,7 +10,7 @@ import type { Context, Events } from '@deepseek-ai/cordis'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
-import type { Agent } from './runtime-types.ts'
+import type { Agent } from './types.ts'
 
 /** Extract the parameter tuple from an event handler type (its `this` is not part of the tuple). */
 type Params<F> = F extends (...args: infer P) => unknown ? P : never
@@ -118,8 +118,8 @@ export function agentEvents(ctx: Context, agent: Agent, carrier: Scoped<Agent> =
     ({ ...payload, agent } as PayloadOf<K>)
   return {
     emit(name, payload) {
-      // Cordis emit invokes listeners in one uncontained loop: a synchronous
-      // throw starves the rest, and returned promises are discarded. Agent
+      // Cordis emit invokes callbacks through Array.map: one synchronous throw
+      // starves later listeners, and returned promises are discarded. Agent
       // notifications are non-vetoing, so resolve the same filtered callback
       // set ourselves and contain both failure modes independently.
       const args: unknown[] = [carrier, name, fused(payload)]

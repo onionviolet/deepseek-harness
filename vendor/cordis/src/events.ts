@@ -1,7 +1,6 @@
-import { defineProperty } from '@deepseek-ai/cosmokit'
-import type { Awaitable, Promisify } from '@deepseek-ai/cosmokit'
+import { defineProperty, type Awaitable, type Promisify } from '@deepseek-ai/cosmokit'
 import { Context } from './context.ts'
-import { Fiber, FiberState } from './fiber.ts'
+import { Fiber, FiberState, resolveConfig } from './fiber.ts'
 import { DisposableList, symbols } from './utils.ts'
 
 /**
@@ -141,30 +140,25 @@ export class EventsService {
       if (name === 'internal/update' && !options.global) {
         const hooks = this.fiber._hooks['internal/update'] ??= new DisposableList()
         const method = options.prepend ? 'unshift' : 'push'
-        // As an effect, so the listener is removed when the fiber unloads: the
-        // Fiber instance survives a reload, and a bare list entry would leave
-        // the previous generation's closure registered forever.
         return this.fiber.effect(() => hooks[method](listener), 'ctx.on("internal/update")')
       }
     })
 
-    this.on('internal/update', function (config, noSave, next) {
+    this.on('internal/update', function (config, next) {
       const cbs = [...this._hooks['internal/update'] || []]
       const _next = () => {
         const cb = cbs.shift() ?? next
-        return cb.call(this, config, noSave, _next)
+        return cb.call(this, config, _next)
       }
       return _next()
     }, { global: true, prepend: true })
+
+    this.on('internal/config', (fiber, next) => {
+      const config = next()
+      return fiber.runtime ? resolveConfig(fiber.runtime, config) : config
+    })
   }
 
-  /**
-   * Resolve listeners for one dispatch and apply context filtering.
-   *
-   * @param type — the dispatch mode, reported on `internal/dispatch`.
-   * @param args — the raw dispatch arguments; consumed up to the event name.
-   * @returns the dispatch `this` and the matching unbound listener callbacks.
-   */
   private _resolve(type: string, args: any[]) {
     const thisArg = typeof args[0] === 'object' || typeof args[0] === 'function' ? args.shift() : null
     const name: string | symbol = args.shift()
@@ -177,15 +171,11 @@ export class EventsService {
   }
 
   /**
-   * Resolve listeners for one dispatch, each bound to the dispatch `this`.
-   *
-   * The harness resolves listener sets itself where it must contain a
-   * per-listener failure, so this stays supported locally (vendor/README.md
-   * local modification 19) even though upstream marks it `@deprecated`.
-   *
-   * @param type — the dispatch mode, reported on `internal/dispatch`.
-   * @param args — the raw dispatch arguments; consumed up to the event name.
-   * @returns the matching listener callbacks, bound to the dispatch `this`.
+   * Resolve bound callbacks using the event's context filter.
+   * @param type Dispatch mode reported to observers.
+   * @param args Dispatch arguments, consumed through the event name.
+   * @returns Matching callbacks bound to the dispatch receiver.
+   * DSH retains callback enumeration for per-listener error containment.
    */
   dispatch(type: string, args: any[]) {
     const [thisArg, callbacks] = this._resolve(type, args)
@@ -199,7 +189,7 @@ export class EventsService {
    * @returns a promise resolving once every listener has settled.
    */
   async parallel(...args: any[]) {
-    const [thisArg, callbacks] = this._resolve('emit', args)
+    const [thisArg, callbacks] = this._resolve('parallel', args)
     const results = await Promise.allSettled(callbacks.map(async callback => Reflect.apply(callback, thisArg, args)))
     const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     if (errors.length) throw new AggregateError(errors.map(error => error.reason))
@@ -270,15 +260,6 @@ export class EventsService {
     return dispatch()
   }
 
-  /**
-   * Store a listener record as an effect on the current fiber.
-   *
-   * @param label — effect label shown in fiber diagnostics.
-   * @param name — the event name the listener is stored under.
-   * @param callback — the listener to store.
-   * @param options — placement and filtering options.
-   * @returns a disposer that unregisters the listener.
-   */
   private register(label: string, name: string | symbol, callback: any, options: EventOptions): () => void {
     const method = options.prepend ? 'unshift' : 'push'
     return this.ctx.fiber.effect(() => {
@@ -288,13 +269,6 @@ export class EventsService {
     }, label)
   }
 
-  /**
-   * Remove a stored listener record.
-   *
-   * @param name — the event name the listener is stored under.
-   * @param callback — the listener to remove.
-   * @returns `true` if the listener was found and removed.
-   */
   private unregister(name: string | symbol, callback: any) {
     const hooks = this._hooks[name]
     if (!hooks) return
@@ -358,22 +332,34 @@ export class EventsService {
  * diagnostics before public events are delivered.
  */
 export interface Events {
-  /** Symbol-keyed events carry no declared signature; dispatch passes their arguments through. */
   [key: symbol]: (...args: any[]) => any
   /** A plugin fiber was created or its uid was cleared on disposal. */
   'internal/plugin'(fiber: Fiber): void
   /** A fiber changed lifecycle state; receives the fiber and its previous state. */
   'internal/status'(fiber: Fiber, oldValue: FiberState): void
+  /** A service binding was refreshed in the matching isolation scope. */
+  'internal/service'(this: Context, name: string, value: any): void
   /**
-   * Resolve raw plugin config after the fiber's injections become active.
-   * @param config - the raw config for this activation.
+   * Apply resolved config; omitting `next()` keeps the current instance.
+   * @param resolvedConfig - the evaluated and validated candidate.
+   * @param next - restarts the fiber and waits for its lifecycle work.
    * @mode waterfall
    */
-  'internal/config'(this: Fiber, config: any, next: () => any): any
-  /** Interception hook for a service binding (no core producer). */
-  'internal/service'(this: Context, name: string, value: any): void
-  /** Waterfall: a fiber config update is being applied; skip `next()` to veto. */
-  'internal/update'(this: Fiber, config: any, noSave: boolean, next: () => Awaitable<void>): Awaitable<void>
+  'internal/update'(this: Fiber, resolvedConfig: any, next: () => Awaitable<void>): Awaitable<void>
+  /**
+   * Persist original config from a programmatic update, before its lifecycle transition.
+   * @param fiber - the updated fiber.
+   * @param originalConfig - the raw candidate; omitted when update uses noSave.
+   * @mode emit
+   */
+  'internal/commit'(fiber: Fiber, originalConfig: any): void
+  /**
+   * Resolve plugin config after injections are active; candidate resolution does not publish it.
+   * @param fiber - the fiber whose candidate is being resolved.
+   * @param next - obtains the raw candidate from inner listeners.
+   * @mode waterfall
+   */
+  'internal/config'(fiber: Fiber, next: () => any): any
   /** Waterfall: a service is being read through the context proxy. */
   'internal/get'(ctx: Context, name: string, error: Error, next: () => any): any
   /** Waterfall: a service is being written through the context proxy. */

@@ -1,10 +1,10 @@
-import { Context, Inject, Service, type Fiber, type Plugin } from '@deepseek-ai/cordis'
+import { Context, Inject, Service, type Plugin } from '@deepseek-ai/cordis'
 import type { Dict } from '@deepseek-ai/cosmokit'
 import { ModuleLoader, type ModuleJob, type ResolveResult } from '@deepseek-ai/cordis-plugin-loader'
 import type { Include } from '@deepseek-ai/cordis-plugin-include'
 import { FSWatcher, watch, type ChokidarOptions } from 'chokidar'
-import { dirname, relative, resolve } from 'node:path'
-import { realpath, stat } from 'node:fs/promises'
+import { relative, resolve } from 'node:path'
+import { realpath } from 'node:fs/promises'
 import { handleError } from './error.ts'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -19,14 +19,7 @@ declare module '@deepseek-ai/cordis' {
 
   interface Events {
     'hmr/change'(url: string): void
-    'hmr/reload'(stalePlugins: Map<Plugin, StalePlugin>): void
-    /**
-     * A watched config-file refresh failed.
-     * @param filename - Absolute path observed by HMR.
-     * @param error - Normalized refresh failure.
-     * @mode parallel
-     */
-    'hmr/config-update-failed'(filename: string, error: Error): Promise<void> | void
+    'hmr/reload'(reloads: Map<Plugin, Reload>): void
   }
 }
 
@@ -47,70 +40,9 @@ async function loadDependencies(job: ModuleJob, ignored = new Set<string>()) {
   return dependencies
 }
 
-/** An entry plugin whose module has changed. Keyed by the *old* plugin. */
-interface StalePlugin {
+interface Reload {
   filename: string
-  /** the runtime the old plugin was registered under */
   runtime?: Plugin.Runtime
-}
-
-interface ConfigRefresh {
-  dirty: boolean
-  running?: Promise<void>
-}
-
-interface ConfigRegistration {
-  watcher: FSWatcher
-}
-
-async function findWatchRoot(filename: string): Promise<{ filename: string; root: string; depth: number }> {
-  let root = dirname(filename)
-  let depth = 0
-  while (true) {
-    try {
-      if (!(await stat(root)).isDirectory()) throw new Error(`config watch parent is not a directory: ${root}`)
-      const canonicalRoot = await realpath(root)
-      return {
-        filename: resolve(canonicalRoot, relative(root, filename)),
-        root: canonicalRoot,
-        depth,
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      const parent = dirname(root)
-      if (parent === root) throw error
-      root = parent
-      depth += 1
-    }
-  }
-}
-
-/** One instance of a stale plugin, paired with what will replace it. */
-interface StaleFiber {
-  /** the entry file, relative to `baseDir`, for logging */
-  path: string
-  /** the freshly imported plugin to rebuild with */
-  replacement: any
-  /** the fiber left behind by the unload stage */
-  fiber: Fiber
-}
-
-/**
- * Whether any ancestor of `fiber` is inactive, i.e. already disposed. Such a
- * fiber must not be rebuilt, for either of two reasons:
- *
- * - The ancestor is being reloaded in this batch, and rebuilding it rebuilds
- *   everything below it.
- * - The ancestor went away for an unrelated reason (a service disappeared, a
- *   concurrent config update). Nobody is going to rebuild it, and registering
- *   under a disposed context throws `INACTIVE_EFFECT`.
- */
-function hasInactiveAncestor(fiber: Fiber) {
-  for (let current = fiber.parent.fiber; ; current = current.parent.fiber) {
-    if (current.uid === null) return true
-    // the root fiber is its own parent's fiber
-    if (current === current.parent.fiber) return false
-  }
 }
 
 @Inject('loader')
@@ -118,11 +50,8 @@ function hasInactiveAncestor(fiber: Fiber) {
 class Hmr extends Service {
   public baseDir: string
 
-  private internal?: ModuleLoader
+  private internal: ModuleLoader
   private watcher!: FSWatcher
-  private readonly configs = new Map<string, ConfigRegistration>()
-  private readonly configRefreshes = new WeakMap<object, ConfigRefresh>()
-  private readonly refreshTasks = new Set<Promise<void>>()
 
   /**
    * Changes from externals will always trigger a full reload.
@@ -147,90 +76,25 @@ class Hmr extends Service {
 
   constructor(ctx: Context, public config: Hmr.Config) {
     super(ctx, 'hmr')
+    if (!this.ctx.loader.internal) {
+      throw new Error('--expose-internals is required for HMR service')
+    }
     this.internal = this.ctx.loader.internal
     this.baseDir = fileURLToPath(new URL(config.base || '.', ctx.baseUrl))
-  }
-
-  /**
-   * Watch one exact config path outside the configured module roots.
-   * @param filename - Config path, resolved against the HMR base directory.
-   * @param refresh - Refresh callback run serially on add, change, or unlink.
-   * @returns an asynchronous disposer once the exact watch is ready.
-   * @throws when HMR is inactive, the path is already registered, or watcher startup fails.
-   */
-  async registerConfig(filename: string, refresh: () => Promise<void> | void): Promise<() => Promise<void>> {
-    if (!this.watcher) throw new Error('HMR is not active')
-    filename = resolve(this.baseDir, filename)
-    const target = await findWatchRoot(filename)
-    const watchFilename = target.filename
-    if (this.configs.has(watchFilename)) throw new Error(`config path already registered: ${filename}`)
-
-    const { root, depth } = target
-    const watcher = watch(root, {
-      ...this.config,
-      cwd: undefined,
-      depth,
-      ignored: undefined,
-      ignoreInitial: false,
-    })
-    const registration = { watcher }
-    this.configs.set(watchFilename, registration)
-    const onChange = (path: string) => {
-      const observed = resolve(path)
-      if (observed !== filename && observed !== watchFilename) return
-      this.refreshConfig(registration, filename, refresh)
-    }
-    watcher.on('add', onChange)
-    watcher.on('change', onChange)
-    watcher.on('unlink', onChange)
-
-    const ready = Promise.withResolvers<void>()
-    let readyState: 'pending' | 'resolved' | 'rejected' = 'pending'
-    watcher.once('ready', () => {
-      readyState = 'resolved'
-      ready.resolve()
-    })
-    watcher.on('error', (error) => {
-      if (readyState === 'pending') {
-        readyState = 'rejected'
-        ready.reject(error)
-      } else {
-        this.ctx.logger.warn(error)
-      }
-    })
-
-    try {
-      await ready.promise
-      return this.ctx.effect(() => async () => {
-        if (this.configs.get(watchFilename) === registration) this.configs.delete(watchFilename)
-        await watcher.close()
-        await this.configRefreshes.get(registration)?.running
-      }, 'hmr.registerConfig()')
-    } catch (error) {
-      this.configs.delete(watchFilename)
-      await watcher.close()
-      throw error
-    }
   }
 
   /**
    * Resolve a module specifier to a URL, compatible with Node 22-24.
    */
   private async _resolve(specifier: string, parentURL: string, attrs: ImportAttributes): Promise<ResolveResult> {
-    const internal = this.internal!
-    switch (internal.version) {
-      case 'v1': return await internal.resolve(specifier, parentURL, attrs)
-      case 'v2': return internal.resolveSync(parentURL, { specifier, attributes: attrs })
+    switch (this.internal.version) {
+      case 'v1': return await this.internal.resolve(specifier, parentURL, attrs)
+      case 'v2': return this.internal.resolveSync(parentURL, { specifier, attributes: attrs })
     }
   }
 
   async* [Service.init]() {
-    yield async () => {
-      await this.watcher?.close()
-      await Promise.allSettled([...this.configs.values()].map(registration => registration.watcher.close()))
-      this.configs.clear()
-      await Promise.allSettled([...this.refreshTasks])
-    }
+    yield () => this.watcher?.close()
 
     const { loader } = this.ctx
     const { root, ignored } = this.config
@@ -239,74 +103,56 @@ class Hmr extends Service {
     } else {
       this.ctx.logger.info('watching %o in %s', root, this.baseDir)
     }
-    if (!this.internal) {
-      this.ctx.logger.warn('loader internals are unavailable, module reloading is disabled '
-        + '(config files are still reloaded); pass --expose-internals or install node-addon-require-builtin to enable it')
-    }
 
     const match = picomatch(ignored)
     const watchBaseDir = await realpath(this.baseDir)
 
-    // Collect externals (framework modules reachable from the main entry;
-    // changes to them require a full process restart) before opening the
-    // watcher, so every post-ready change is observed by listeners that
-    // already have their classification state.
-    this.externals = new Set()
+    // Collect externals before opening the watcher so every post-ready change
+    // is observed by listeners that already have their classification state.
     const mainUrl = pathToFileURL(resolve(process.argv[1])).href
-    const mainJob = this.internal?.loadCache.get(mainUrl)
+    const mainJob = this.internal.loadCache.get(mainUrl)
     if (mainJob) {
       this.externals = await loadDependencies(mainJob)
+    } else {
+      this.externals = new Set()
     }
 
     this.watcher = watch(root, {
       ...this.config,
       cwd: watchBaseDir,
       ignored: path => match(relative(watchBaseDir, path)),
-      // The initial scan re-announces files the boot just consumed: an `add`
-      // for a config file refreshes an include whose initial apply may still
-      // be in flight, and a failing apply then rolls this plugin back while
-      // the scan-triggered refresh waits on that apply — a teardown deadlock
-      // that strands boot without a diagnostic. Only events after the scan
-      // matter here; `registerConfig` keeps its own initial scan because a
-      // user patch layer present at registration must apply once.
       ignoreInitial: true,
     })
 
     const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce)
 
-    const onChange = (kind: 'add' | 'change' | 'unlink', path: string) => {
-      this.ctx.logger.debug('%s detected at %C', kind, path)
+    this.watcher.on('change', async (path) => {
+      this.ctx.logger.debug('change detected at %C', path)
       const filename = resolve(watchBaseDir, path)
       const configuredFilename = resolve(this.baseDir, path)
-      // Config reload: the file is a loader config file (e.g. cordis.yml).
+      const url = pathToFileURL(filename).href
+
+      // Full reload: the changed file is part of the framework
+      if (this.externals.has(url)) return loader.exit()
+
+      // Partial reload: the file is in the ESM loadCache
+      // In Node 24, both CJS and ESM modules imported via import() end up
+      // in loadCache, so this check covers all module formats.
+      if (loader.internal!.loadCache.has(url)) {
+        this.stashed.add(url)
+        return partialReload()
+      }
+
       for (const entry of loader.entries()) {
         const include = entry.subtree as Include | undefined
         if (include?.filename !== filename && include?.filename !== configuredFilename) continue
-        this.refreshConfig(include, include.filename, () => include.refresh())
+        // A rejected refresh reports unsaved runtime changes; Include keeps its running tree.
+        try { await include.refresh() } catch (error) { this.ctx.logger.warn(error) }
         return
       }
 
-      if (kind !== 'change') return
-      const url = pathToFileURL(filename).href
-
-      if (this.internal) {
-        // Full reload: the changed file is part of the framework
-        if (this.externals.has(url)) return loader.exit()
-
-        // Partial reload: the file is in the ESM loadCache
-        // In Node 24, both CJS and ESM modules imported via import() end up
-        // in loadCache, so this check covers all module formats.
-        if (this.internal.loadCache.has(url)) {
-          this.stashed.add(url)
-          return partialReload()
-        }
-      }
-
       this.ctx.emit('hmr/change', url)
-    }
-    this.watcher.on('add', path => onChange('add', path))
-    this.watcher.on('change', path => onChange('change', path))
-    this.watcher.on('unlink', path => onChange('unlink', path))
+    })
 
     const ready = Promise.withResolvers<void>()
     let readyState: 'pending' | 'resolved' | 'rejected' = root.length === 0 ? 'resolved' : 'pending'
@@ -329,42 +175,13 @@ class Hmr extends Service {
     await ready.promise
   }
 
-  private refreshConfig(key: object, filename: string, refresh: () => Promise<void> | void) {
-    const state = this.configRefreshes.get(key) ?? { dirty: false }
-    this.configRefreshes.set(key, state)
-    state.dirty = true
-    if (state.running) return
-    const task = (async () => {
-      do {
-        state.dirty = false
-        try {
-          await refresh()
-        } catch (reason) {
-          const error = reason instanceof Error ? reason : new Error(String(reason), { cause: reason })
-          this.ctx.logger.warn('config reload at %C failed', filename)
-          this.ctx.logger.warn(error)
-          try {
-            await this.ctx.parallel('hmr/config-update-failed', filename, error)
-          } catch (rejection) {
-            this.ctx.logger.warn(rejection)
-          }
-        }
-      } while (state.dirty)
-    })().finally(() => {
-      state.running = undefined
-      this.refreshTasks.delete(task)
-    })
-    state.running = task
-    this.refreshTasks.add(task)
-  }
-
   // hide stack trace from HMR
   getOuterStack = (): string[] => [
     // '    at HMR.partialReload (<anonymous>)',
   ]
 
   async getLinked(url: string) {
-    const job = this.internal?.loadCache.get(url)
+    const job = this.internal.loadCache.get(url)
     if (!job) return []
     const linked = await job.linked
     return Array.prototype.map.call(linked, (job: ModuleJob) => job.url) as string[]
@@ -433,12 +250,10 @@ class Hmr extends Service {
   }
 
   private async partialReload() {
-    const internal = this.internal!
     await this.analyzeChanges()
 
-    const candidates = new Map<ModuleJob, Plugin>()
-    const invalidatedModules = new Set(this.accepted)
-    const stalePlugins = new Map<Plugin, StalePlugin>()
+    const pending = new Map<ModuleJob, Plugin>()
+    const reloads = new Map<Plugin, Reload>()
 
     // Build a map of plugin names per config tree URL.
     // Plugin entry files are treated as atomic reload units.
@@ -453,10 +268,10 @@ class Hmr extends Service {
         try {
           const { url } = await this._resolve(name, baseUrl, {})
           if (this.declined.has(url)) continue
-          const job = internal.loadCache.get(url)
+          const job = this.internal.loadCache.get(url)
           const plugin = this.ctx.loader.unwrapExports(job?.module?.getNamespace())
           if (!job || !plugin) continue
-          candidates.set(job, plugin)
+          pending.set(job, plugin)
           this.declined.add(url)
         } catch (err) {
           this.ctx.logger.warn(err)
@@ -464,24 +279,23 @@ class Hmr extends Service {
       }
     }
 
-    // Check each candidate plugin's dependency tree for accepted files
-    for (const [job, plugin] of candidates) {
+    // Check each pending plugin's dependency tree for accepted files
+    for (const [job, plugin] of pending) {
       this.declined.delete(job.url)
       const dependencies = [...await loadDependencies(job, this.declined)]
       this.declined.add(job.url)
 
       if (!dependencies.some(dep => this.accepted.has(dep))) continue
-      dependencies.forEach(dep => invalidatedModules.add(dep))
+      dependencies.forEach(dep => this.accepted.add(dep))
 
-      stalePlugins.set(plugin, {
+      reloads.set(plugin, {
         filename: job.url,
         runtime: this.ctx.registry.get(plugin),
       })
     }
 
     /**
-     * Clear module caches for affected modules and complete dependency trees
-     * of selected plugins before re-importing.
+     * Clear module caches for all accepted files before re-importing.
      *
      * We need to clear both:
      * 1. ESM loadCache — managed by Node's internal ModuleLoader
@@ -499,11 +313,11 @@ class Hmr extends Service {
     const esmBackup: Dict = Object.create(null)
     const cjsBackup: Dict = Object.create(null)
     const require = createRequire(import.meta.url)
-    for (const filename of invalidatedModules) {
+    for (const filename of this.accepted) {
       // Backup and clear ESM loadCache
-      const job = Map.prototype.get.call(internal.loadCache, filename)
+      const job = Map.prototype.get.call(this.internal.loadCache, filename)
       esmBackup[filename] = job
-      Map.prototype.delete.call(internal.loadCache, filename)
+      Map.prototype.delete.call(this.internal.loadCache, filename)
 
       // Backup and clear CJS Module._cache
       try {
@@ -519,92 +333,70 @@ class Hmr extends Service {
 
     const rollback = () => {
       for (const filename in esmBackup) {
-        Map.prototype.set.call(internal.loadCache, filename, esmBackup[filename])
+        Map.prototype.set.call(this.internal.loadCache, filename, esmBackup[filename])
       }
       for (const filepath in cjsBackup) {
         require.cache[filepath] = cjsBackup[filepath]
       }
     }
 
-    // Stage 1: re-import the module graph (all-or-nothing).
-    // Plugin validity is checked here, where the only mutated state is the
-    // module cache and no plugin has been touched yet. Moving this check
-    // earlier is what allows stage 3 to have no rollback at all: a malformed
-    // export can no longer fail halfway through swapping instances.
-    const replacements: Dict = {}
+    // Attempt to re-import all plugin entry files
+    const attempts: Dict = {}
     try {
-      for (const [, { filename, runtime }] of stalePlugins) {
-        const exports = this.ctx.loader.unwrapExports(await this.ctx.loader.import(filename, this.getOuterStack))
-        if (runtime && !this.ctx.registry.resolve(exports)) {
-          throw new Error(`invalid plugin at ${relative(this.baseDir, fileURLToPath(filename))}, `
-            + `expect function or object with an "apply" method, received ${typeof exports}`)
-        }
-        replacements[filename] = exports
+      for (const [, { filename }] of reloads) {
+        attempts[filename] = this.ctx.loader.unwrapExports(await this.ctx.loader.import(filename, this.getOuterStack))
       }
     } catch (e) {
       handleError(this.ctx, e)
       return rollback()
     }
 
-    // Stage 2: unload (per plugin, synchronous).
-    // `registry.delete()` does not block, so deleting everything up front
-    // costs nothing, and it is what makes the ancestor check below decidable:
-    // by the time anything is rebuilt, every fiber this batch tears down has
-    // already had its `uid` cleared.
-    let staleFibers: StaleFiber[] = []
-    for (const [plugin, { filename, runtime }] of stalePlugins) {
-      if (!runtime) continue
-      const path = relative(this.baseDir, fileURLToPath(filename))
-
-      // `registry.delete()` deliberately leaves the fibers in `runtime.fibers`
-      // (the `registry.has()` guard in `Fiber` skips the removal) so that we
-      // can rebuild from them; snapshot anyway, as the list is backed by a
-      // live `Map` iterator.
-      const fibers = [...runtime.fibers]
-      try {
-        this.ctx.registry.delete(plugin)
-      } catch (err) {
-        this.ctx.logger.warn('failed to dispose plugin at %C', path)
-        this.ctx.logger.warn(err)
-      }
-      for (const fiber of fibers) {
-        staleFibers.push({ path, replacement: replacements[filename], fiber })
+    const reload = (plugin: any, runtime: Plugin.Runtime) => {
+      if (!runtime) return
+      for (const oldFiber of runtime.fibers) {
+        const fiber = oldFiber.parent.registry.plugin(plugin, oldFiber.rawConfig, this.getOuterStack)
+        fiber.entry = oldFiber.entry
+        if (fiber.entry) fiber.entry.fiber = fiber
       }
     }
 
-    // Everything below a fiber that is going away is rebuilt by that fiber, so
-    // rebuilding it here as well would yield two instances. Decided in a
-    // single pass now that every delete is done and before anything is
-    // awaited, so that stage 3 only ever has to think about its own fiber.
-    staleFibers = staleFibers.filter((stale) => {
-      if (!hasInactiveAncestor(stale.fiber)) return true
-      this.ctx.logger.debug('skip plugin at %C (inactive ancestor)', stale.path)
-      return false
-    })
+    try {
+      for (const [plugin, { filename, runtime }] of reloads) {
+        if (!runtime) continue
+        const path = relative(this.baseDir, fileURLToPath(filename))
 
-    // Stage 3: reload (per fiber, concurrent).
-    const logged = new Set<string>()
-    await Promise.all(staleFibers.map(async ({ path, replacement, fiber }) => {
-      try {
-        while (fiber.inertia) await fiber.inertia
-
-        const newFiber = fiber.parent.registry.plugin(replacement, fiber._config, this.getOuterStack)
-        newFiber.entry = fiber.entry
-        if (newFiber.entry) newFiber.entry.fiber = newFiber
-        if (!logged.has(path)) {
-          logged.add(path)
-          this.ctx.logger.info('reload plugin at %C', path)
+        try {
+          this.ctx.registry.delete(plugin)
+        } catch (err) {
+          this.ctx.logger.warn('failed to dispose plugin at %C', path)
+          this.ctx.logger.warn(err)
         }
-      } catch (err) {
-        // No rollback: a plugin that fails to load is left failed, exactly
-        // as it would be on a cold start. It stays registered and keeps its
-        // parent and config, so the next change to the file retries it.
-        this.ctx.logger.warn('failed to reload plugin at %C', path)
-        this.ctx.logger.warn(err)
-      }
-    }))
 
-    this.ctx.emit('hmr/reload', stalePlugins)
+        try {
+          reload(attempts[filename], runtime)
+          this.ctx.logger.info('reload plugin at %C', path)
+        } catch (err) {
+          this.ctx.logger.warn('failed to reload plugin at %C', path)
+          this.ctx.logger.warn(err)
+          throw err
+        }
+      }
+    } catch {
+      // Rollback: restore caches and re-register old plugins
+      rollback()
+      for (const [plugin, { filename, runtime }] of reloads) {
+        if (!runtime) continue
+        try {
+          this.ctx.registry.delete(attempts[filename])
+          reload(plugin, runtime)
+        } catch (err) {
+          this.ctx.logger.warn(err)
+        }
+      }
+      return
+    }
+
+    this.ctx.emit('hmr/reload', reloads)
     this.stashed = new Set()
   }
 }
