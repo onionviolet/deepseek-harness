@@ -51,4 +51,4 @@ Local work is not an unattended scheduler. Sending, submitting, spending, publis
 
 ## Dev Note
 
-The Web composition test checks the 14-tool catalog and loads the bundled script skill from an isolated filesystem provider. The `local-work-tools` recorded-session scenario checks the headless overlay. Live synthetic script receipts belong in local evidence, not private project logs copied into the repository.
+The Web composition test checks the 18-tool catalog and loads the bundled script skill from an isolated filesystem provider. The `local-work-tools` recorded-session scenario checks the headless overlay. Live synthetic script receipts belong in local evidence, not private project logs copied into the repository.

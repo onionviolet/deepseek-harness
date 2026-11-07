@@ -270,7 +270,8 @@ describe('the optional local coding composition', () => {
       expect(toolNames(local, handle.agent)).toEqual([
         'ask_user_question', process.platform === 'win32' ? 'pwsh' : 'bash',
         'edit', 'glob', 'grep', 'job_kill', 'job_list', 'job_output',
-        'read', 'working_directory', 'write',
+        'read', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update',
+        'working_directory', 'write',
       ].sort())
       handle.agent.followup(createUserMessage({
         content: [{ type: 'text', text: 'Remember the project requirements. '.repeat(200) }],
@@ -321,14 +322,15 @@ describe('the optional local work composition', () => {
       expect(names).toEqual([
         'ask_user_question', process.platform === 'win32' ? 'pwsh' : 'bash',
         'edit', 'glob', 'grep', 'job_kill', 'job_list', 'job_output',
-        'present', 'read', 'skill', 'todo_write', 'working_directory', 'write',
+        'present', 'read', 'skill', 'team_task_create', 'team_task_get', 'team_task_list',
+        'team_task_update', 'todo_write', 'working_directory', 'write',
       ].sort())
       const loaded = await executeToolFixture(local, {
         callId: ToolCallId('local-work-load-skill'), name: 'skill',
         arguments: { name: 'local-scripts' }, signal: new AbortController().signal, agent: handle.agent,
       })
       expect(loaded.isError).toBe(false)
-      expect(JSON.stringify(loaded.content)).toContain('headers, row counts, totals')
+      expect(JSON.stringify(loaded.content)).toContain('check actual headers, counts, totals')
     } finally {
       await handle?.dispose()
       await local.fiber.dispose()
